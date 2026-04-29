@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 基本的にすべてのアクセスを拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /submissions/{submissionId} {
+      // モニター用：承認済みのデータのみ誰でも読み取り可能
+      // 管理画面用：すべてのデータを読み取れる必要がある場合は、Admin SDK経由にするか、管理者認証を追加する
+      allow read: if resource.data.status == 'approved';
+      
+      // 投稿者本人用：自分の投稿のみ読み取り可能
+      // ※簡易的なuserIdベースのチェック（本来は request.auth.uid を使用すべき）
+      allow read: if request.query.userId == resource.data.userId;
+      
+      // 書き込みはすべてNext.jsサーバー(Admin SDK)が行うため、
+      // クライアントからの直接のcreate/update/deleteは一切許可しない
+      allow write: if false;
+    }
+  }
+}

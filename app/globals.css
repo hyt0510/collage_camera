@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f4f5;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.animate-popup {
+  animation: popupIn 1.5s ease-in-out forwards;
+}
+
+@keyframes popupIn {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) translateY(160px);
+    opacity: 0;
+  }
+}
