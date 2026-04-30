@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
-import { fetchAssignedPreset, submitCollageData, sendDebugLogToTerminal } from "@/services/api/collage";
+import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 
 const IMAGES_KEY = "collage_v10_img";
@@ -33,16 +33,8 @@ export function useCollageCapture() {
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
 
-  const pushLog = useCallback((msg: string) => {
-    const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    console.log(line);
-    setLogs(prev => [line, ...prev].slice(0, 30));
-    setTimeout(() => {
-      sendDebugLogToTerminal(line).catch(() => {});
-    }, 0);
-  }, []);
+  const pushLog = useCallback((_msg: string) => {}, []);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -192,7 +184,7 @@ export function useCollageCapture() {
   };
 
   return { 
-    template, themeMap, images, logs, errorMessage, 
+    template, themeMap, images, errorMessage, 
     submitting, result, collageDataUrl, submissionCount, 
     collageHistory,
     handleFileChange, submit, reset, pushLog 
