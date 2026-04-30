@@ -168,6 +168,6 @@ export async function generateCollageImage(
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/jpeg", 0.8);
+  return canvas.toDataURL("image/webp", 0.8);
 }
 
