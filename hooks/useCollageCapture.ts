@@ -34,10 +34,7 @@ export function useCollageCapture() {
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
 
-  const pushLog = useCallback((_msg: string) => {
-    // デバッグ用
-    console.log(`[CollageLog] ${_msg}`);
-  }, []);
+  const pushLog = useCallback((_msg: string) => {}, []);
 
   const reset = useCallback(() => {
     setResult(null);
