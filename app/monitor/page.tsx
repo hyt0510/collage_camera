@@ -16,23 +16,28 @@ export default function MonitorPage() {
 
   useEffect(() => {
     async function poll() {
-      const response = await fetch("/api/submissions", { cache: "no-store" });
-      if (!response.ok) {
-        return;
-      }
-      const payload = (await response.json()) as { submissions: MonitorSubmission[] };
-      const nextItems = payload.submissions;
+      try {
+        const response = await fetch("/api/submissions", { cache: "no-store" });
+        if (!response.ok) {
+          console.warn(`Fetch failed: ${response.status} ${response.statusText}`);
+          return;
+        }
+        const payload = (await response.json()) as { submissions: MonitorSubmission[] };
+        const nextItems = payload.submissions;
 
-      const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
-      if (newItems.length > 0) {
-        // nextItemsは降順(新→古)なので、newItemsの先頭が最新
-        const latest = newItems[0]!;
-        setPopup(latest);
-        window.setTimeout(() => setPopup(null), 2000);
-      }
+        const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
+        if (newItems.length > 0) {
+          // nextItemsは降順(新→古)なので、newItemsの先頭が最新
+          const latest = newItems[0]!;
+          setPopup(latest);
+          window.setTimeout(() => setPopup(null), 2000);
+        }
 
-      knownIds.current = new Set(nextItems.map((item) => item.id));
-      setSubmissions(nextItems);
+        knownIds.current = new Set(nextItems.map((item) => item.id));
+        setSubmissions(nextItems);
+      } catch (error) {
+        console.error("Monitor polling error:", error);
+      }
     }
 
     void poll();

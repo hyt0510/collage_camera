@@ -62,7 +62,9 @@ export async function moderateImage(dataUrl: string): Promise<ModerationResult> 
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
       console.warn(`Cloud Vision API returned ${response.status}. Falling back to manual moderation.`);
+      console.warn(`Error Details: ${errorText}`);
       return { safe: null, source: "disabled", reason: `API Error ${response.status}` };
     }
 

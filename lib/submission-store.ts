@@ -21,7 +21,7 @@ export type SubmissionItemInput = {
 export type SubmissionItem = {
   polygonId: string;
   theme: string;
-  imageUrl: string;
+  imageUrl?: string; // 個別画像URLはオプショナルに（保存しないため）
   moderation: ModerationResult;
 };
 
@@ -63,8 +63,9 @@ async function uploadBase64Image(dataUrl: string, path: string): Promise<string>
   const buffer = Buffer.from(base64Data, "base64");
   const file = bucket.file(path);
 
+  // WebP形式として保存
   await file.save(buffer, {
-    metadata: { contentType: "image/jpeg" },
+    metadata: { contentType: "image/webp" },
     public: true,
   });
 
@@ -82,48 +83,29 @@ export async function createSubmission(input: {
   
   console.log("Starting createSubmission process...");
 
-  // 1ユーザー1投稿制限のチェック (userId + presetId)
-  if (input.presetId) {
-    const existing = await db.collection("submissions")
-      .where("userId", "==", input.userId)
-      .where("presetId", "==", input.presetId)
-      .limit(1)
-      .get();
-    
-    if (!existing.empty) {
-      console.warn(`User ${input.userId} already has a submission for preset ${input.presetId}.`);
-      throw new Error("ALREADY_SUBMITTED");
-    }
-  }
+  // 1ユーザー1投稿制限のチェックは廃止
   
   // 1. 画像アップロード
   let items: SubmissionItem[];
   let collageImageUrl: string | undefined;
 
   try {
-    // 個別画像のアップロード
-    items = await Promise.all(
-      input.items.map(async (item) => {
-        const storagePath = `submissions/${Date.now()}_${input.userId}_${item.polygonId}.jpg`;
-        console.log(`Uploading to Storage: ${storagePath}`);
-        const imageUrl = await uploadBase64Image(item.dataUrl, storagePath);
-        return {
-          polygonId: item.polygonId,
-          theme: item.theme,
-          imageUrl,
-          moderation: item.moderation,
-        };
-      })
-    );
+    // 個別画像はストレージに保存せず、メタデータ（検閲結果など）のみ保持する
+    items = input.items.map((item) => ({
+      polygonId: item.polygonId,
+      theme: item.theme,
+      moderation: item.moderation,
+    }));
 
-    // コラージュ全体の画像があればアップロード
+    // コラージュ全体の画像のみをアップロード
     if (input.collageDataUrl) {
-      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.jpg`;
-      console.log(`Uploading Collage to Storage: ${collagePath}`);
+      // ファイル拡張子を.webpに変更
+      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
+      console.log(`Uploading Collage to Storage (WebP): ${collagePath}`);
       collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
     }
 
-    console.log("Step 1: All images uploaded to Storage.");
+    console.log("Step 1: Collage image uploaded to Storage.");
   } catch (e: any) {
     console.error("Step 1 FAILED (Storage):", e.message);
     throw new Error(`Storage Error: ${e.message}`);
@@ -133,7 +115,6 @@ export async function createSubmission(input: {
   const submissionRef = db.collection("submissions").doc();
   const submissionId = submissionRef.id;
 
-  // スマート配置ロジック: 空いている枠を優先的に探す
   let placement = placements[Math.floor(Math.random() * placements.length)]!;
   try {
     const activeSubmissions = await db.collection("submissions")
