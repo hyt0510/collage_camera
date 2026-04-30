@@ -21,11 +21,8 @@ function decideStatus(results: ModerationResult[]): ModerationStatus {
 export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope");
-    console.log(`GET /api/submissions scope=${scope}`);
     const submissions =
       scope === "all" ? await listAllSubmissions() : await listApprovedSubmissions();
-    
-    console.log(`Found ${submissions.length} submissions`);
 
     const serialized = submissions.map((submission) => ({
       ...submission,

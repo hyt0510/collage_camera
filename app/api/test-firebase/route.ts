@@ -3,9 +3,6 @@ import { db } from "@/lib/firebase-admin";
 
 export async function GET() {
   try {
-    console.log("--- Firebase Connectivity Test ---");
-    console.log("Project ID:", process.env.FIREBASE_PROJECT_ID);
-    
     // Firestore にテスト書き込みを試行
     const testRef = db.collection("_debug_test").doc("ping");
     await testRef.set({ 
