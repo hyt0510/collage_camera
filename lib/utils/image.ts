@@ -50,8 +50,9 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         onLog("DrawImage to canvas ok");
         
-        const result = canvas.toDataURL("image/webp", 0.6); // 0.75から0.6に
-        onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64 (webp)`);
+        // image/webp は一部の古いiOSで不安定または未対応のため image/jpeg を使用
+        const result = canvas.toDataURL("image/jpeg", 0.7); 
+        onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64 (jpeg)`);
         resolve(result);
       };
       
@@ -157,10 +158,16 @@ export async function generateCollageImage(
       sy = (img.height - sh) / 2;
     }
 
-    ctx.drawImage(img, sx, sy, sw, sh, minX, minY, polyW, polyH);
+    // 0以下のサイズでの drawImage は SyntaxError (The string did not match the expected pattern) の原因になる
+    const drawW = Math.max(1, polyW);
+    const drawH = Math.max(1, polyH);
+    const sourceW = Math.max(1, sw);
+    const sourceH = Math.max(1, sh);
+
+    ctx.drawImage(img, sx, sy, sourceW, sourceH, minX, minY, drawW, drawH);
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/webp", 0.85);
+  return canvas.toDataURL("image/jpeg", 0.8);
 }
 
