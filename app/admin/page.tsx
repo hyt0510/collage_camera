@@ -47,32 +47,37 @@ export default function AdminPage() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
-    const [submissionsResponse, presetsResponse] = await Promise.all([
-      fetch("/api/submissions?scope=all", { cache: "no-store" }),
-      fetch("/api/capture-preset", { cache: "no-store" }),
-    ]);
-    const submissionsPayload = (await submissionsResponse.json()) as
-      | { submissions: Submission[] }
-      | { error: string };
-    const presetsPayload = (await presetsResponse.json()) as
-      | { presets: PresetSummary[]; activePreset: ActivePreset }
-      | { error: string };
+    try {
+      const [submissionsResponse, presetsResponse] = await Promise.all([
+        fetch("/api/submissions?scope=all", { cache: "no-store" }),
+        fetch("/api/capture-preset", { cache: "no-store" }),
+      ]);
+      const submissionsPayload = (await submissionsResponse.json()) as
+        | { submissions: Submission[] }
+        | { error: string };
+      const presetsPayload = (await presetsResponse.json()) as
+        | { presets: PresetSummary[]; activePreset: ActivePreset }
+        | { error: string };
 
-    if (
-      !submissionsResponse.ok ||
-      !presetsResponse.ok ||
-      !("submissions" in submissionsPayload) ||
-      !("presets" in presetsPayload)
-    ) {
-      setError("投稿一覧の取得に失敗しました。");
-      return;
+      if (
+        !submissionsResponse.ok ||
+        !presetsResponse.ok ||
+        !("submissions" in submissionsPayload) ||
+        !("presets" in presetsPayload)
+      ) {
+        setError("投稿一覧の取得に失敗しました。");
+        return;
+      }
+
+      setError("");
+      setSubmissions(submissionsPayload.submissions);
+      setPresets(presetsPayload.presets);
+      setActivePreset(presetsPayload.activePreset);
+      setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
+    } catch (err) {
+      console.error("Admin refresh error:", err);
+      setError("ネットワークエラーまたはサーバーエラーが発生しました。");
     }
-
-    setError("");
-    setSubmissions(submissionsPayload.submissions);
-    setPresets(presetsPayload.presets);
-    setActivePreset(presetsPayload.activePreset);
-    setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
   }, []);
 
   useEffect(() => {

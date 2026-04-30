@@ -1,3 +1,5 @@
+
+import React from "react";
 import { FrameTemplate } from "@/lib/collage-config";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox } from "@/lib/utils/styles";
 
