@@ -27,13 +27,13 @@ export function useCollageCapture() {
   });
 
   const [images, setImages] = useState<Record<string, string>>({});
-  const [logs, setLogs] = useState<string[]>(["[System] Initializing hook..."]);
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
 
   const pushLog = useCallback((msg: string) => {
     const line = `[${new Date().toLocaleTimeString()}] ${msg}`;

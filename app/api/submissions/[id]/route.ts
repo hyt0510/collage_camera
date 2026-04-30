@@ -42,3 +42,18 @@ export async function PATCH(
 
   return NextResponse.json({ submission: updated });
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id } = await context.params;
+  const { deleteSubmission } = await import("@/lib/submission-store");
+  
+  const success = await deleteSubmission(id);
+  if (!success) {
+    return NextResponse.json({ error: "対象投稿が見つかりません。" }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}
