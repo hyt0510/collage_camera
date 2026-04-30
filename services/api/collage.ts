@@ -40,14 +40,3 @@ export async function submitCollageData(data: {
 
   return payload as SubmissionResult;
 }
-
-export async function sendDebugLogToTerminal(line: string) {
-  try {
-    await fetch("/api/debug-log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ line }),
-      keepalive: true,
-    });
-  } catch { /* ignore */ }
-}

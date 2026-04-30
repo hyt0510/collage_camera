@@ -10,9 +10,6 @@ if (!admin.apps.length) {
   const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  console.log("--- Firebase Admin Discovery ---");
-  console.log("Project ID:", projectId);
-
   try {
     admin.initializeApp({
       credential: admin.credential.cert({
@@ -22,7 +19,6 @@ if (!admin.apps.length) {
       }),
       storageBucket,
     });
-    console.log("SDK Initialized.");
   } catch (error) {
     console.error("SDK Init Error:", error);
   }
@@ -36,7 +32,6 @@ export const bucket = admin.storage().bucket();
   try {
     // データベースの存在を確認
     await db.listCollections();
-    console.log("✅ Firestore Database Found & Connected!");
   } catch (e: any) {
     console.error("❌ Firestore Database NOT FOUND (5 NOT_FOUND)");
     console.error("--------------------------------------------------");
