@@ -103,3 +103,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `保存に失敗: ${error.message}` }, { status: 500 });
   }
 }
+
+export async function DELETE() {
+  const { deleteAllSubmissions } = await import("@/lib/submission-store");
+  try {
+    const count = await deleteAllSubmissions();
+    return NextResponse.json({ success: true, count });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
