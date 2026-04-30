@@ -50,8 +50,8 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         onLog("DrawImage to canvas ok");
         
-        const result = canvas.toDataURL("image/jpeg", 0.75);
-        onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64`);
+        const result = canvas.toDataURL("image/webp", 0.75);
+        onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64 (webp)`);
         resolve(result);
       };
       
@@ -161,6 +161,6 @@ export async function generateCollageImage(
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/jpeg", 0.85);
+  return canvas.toDataURL("image/webp", 0.85);
 }
 

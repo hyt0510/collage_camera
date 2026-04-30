@@ -6,10 +6,15 @@ import { generateCollageImage, compressImage } from "@/lib/utils/image";
 const IMAGES_KEY = "collage_v10_img";
 const PRESET_KEY = "collage_v10_preset";
 const USER_ID_KEY = "collage_v10_uid";
-const SUBMITTED_KEY = "collage_v10_submitted";
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
+const HISTORY_KEY = "collage_v10_history";
 
-let LOG_CACHE: string[] = [];
+export interface CollageHistoryItem {
+  id: string;
+  dataUrl: string;
+  createdAt: string;
+  placementLabel: string;
+}
 
 export function useCollageCapture() {
   const [userId, setUserId] = useState<string>("");
@@ -26,8 +31,8 @@ export function useCollageCapture() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
-  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(0);
+  const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
 
   const pushLog = useCallback((msg: string) => {
     // 運用時はコンソールのみに出力（または必要に応じて完全に消去）
@@ -38,6 +43,7 @@ export function useCollageCapture() {
     setResult(null);
     setCollageDataUrl(null);
     setImages({});
+    localStorage.removeItem(IMAGES_KEY);
     pushLog("UI Reset for new submission");
   }, [pushLog]);
 
@@ -45,20 +51,13 @@ export function useCollageCapture() {
     try {
       const preset = await fetchAssignedPreset();
       if (preset) {
-        // 現在のpresetIdが設定されており、かつサーバーのIDと異なる場合のみリセットを伴う更新を行う
         if (presetId && preset.id !== presetId) {
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
           setThemeMap(preset.themeMap);
           localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
-          pushLog(`New preset detected: ${preset.id}. Resetting for new session.`);
-
-          // 新しいプリセットが来たので撮影内容をリセット
-          setResult(null);
-          setCollageDataUrl(null);
-          setImages({});
+          pushLog(`New preset detected: ${preset.id}.`);
         } else if (!presetId) {
-          // 初期化時：単にセットするだけ
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
           setThemeMap(preset.themeMap);
@@ -69,136 +68,67 @@ export function useCollageCapture() {
     } catch (e) { pushLog(`Sync error in poll: ${String(e)}`); }
   }, [presetId, pushLog]);
 
-  // 定期的にプリセットをチェック
   useEffect(() => {
     const timer = setInterval(() => {
       void syncPreset();
-    }, 10000); // 10秒おき
+    }, 10000);
     return () => clearInterval(timer);
   }, [syncPreset]);
 
   useEffect(() => {
     try {
       pushLog("--- Collage App Mounted ---");
-      pushLog(`UserAgent: ${navigator.userAgent}`);
       
-      let uid: string | null = null;
-      try {
-        uid = localStorage.getItem(USER_ID_KEY);
-        if (!uid) {
-          uid = `user_${Math.random().toString(36).slice(2, 11)}`;
-          localStorage.setItem(USER_ID_KEY, uid);
-        }
-      } catch (e) {
-        pushLog("LocalStorage access failed, using session UID");
-        uid = `session_${Math.random().toString(36).slice(2, 11)}`;
+      let uid = localStorage.getItem(USER_ID_KEY);
+      if (!uid) {
+        uid = `user_${Math.random().toString(36).slice(2, 11)}`;
+        localStorage.setItem(USER_ID_KEY, uid);
       }
       setUserId(uid);
 
-      let savedCount: string | null = null;
-      try {
-        savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
-      } catch (e) { /* ignore */ }
-      
-      if (savedCount) {
-        setSubmissionCount(parseInt(savedCount, 10));
+      const savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
+      if (savedCount) setSubmissionCount(parseInt(savedCount, 10));
+
+      const savedHistory = localStorage.getItem(HISTORY_KEY);
+      if (savedHistory) {
+        try {
+          setCollageHistory(JSON.parse(savedHistory));
+        } catch (e) {
+          pushLog("History restoration failed");
+        }
       }
 
-      let submittedPresetId: string | null = null;
-      try {
-        submittedPresetId = localStorage.getItem(SUBMITTED_KEY);
-      } catch (e) { /* ignore */ }
-
-      // すでに投稿済みであっても、複数回投稿を許可するため、UI表示用のフラグとしてのみ保持
-      if (submittedPresetId) {
-        setAlreadySubmitted(true);
-      }
-
-      let savedImages: string | null = null;
-      let savedPreset: string | null = null;
-      try {
-        savedImages = localStorage.getItem(IMAGES_KEY);
-        savedPreset = localStorage.getItem(PRESET_KEY);
-      } catch (e) { /* ignore */ }
+      const savedImages = localStorage.getItem(IMAGES_KEY);
+      const savedPreset = localStorage.getItem(PRESET_KEY);
       
-      let hasInProgress = false;
-      try {
-        if (savedImages && savedPreset) {
+      if (savedImages && savedPreset) {
+        try {
           const parsedImages = JSON.parse(savedImages);
-          const imgCount = Object.keys(parsedImages).length;
-          if (imgCount > 0) {
-            const preset = JSON.parse(savedPreset);
-            setImages(parsedImages);
-            setPresetId(preset.id);
-            setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
-            setThemeMap(preset.themeMap);
-            pushLog(`Resuming: ${imgCount} photos with saved preset`);
-            hasInProgress = true;
-
-            // 保存されていたプリセットが投稿済みならフラグを立てる
-            if (submittedPresetId === preset.id) {
-              setAlreadySubmitted(true);
-            }
-          }
-        }
+          const preset = JSON.parse(savedPreset);
+          setImages(parsedImages);
+          setPresetId(preset.id);
+          setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
+          setThemeMap(preset.themeMap);
+          pushLog(`Resuming: ${Object.keys(parsedImages).length} photos`);
         } catch (e) { pushLog("Restoration failed"); }
-
-        if (!hasInProgress) {
-        const sync = async () => {
-          try {
-            const preset = await fetchAssignedPreset();
-            if (preset) {
-              setPresetId(preset.id);
-              setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
-              setThemeMap(preset.themeMap);
-              try {
-                localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
-              } catch (e) { /* ignore */ }
-              pushLog(`Synced with latest server preset: ${preset.id}`);
-
-              // 最新のプリセットが投稿済みかチェック
-              let currentSubmittedId: string | null = null;
-              try {
-                currentSubmittedId = localStorage.getItem(SUBMITTED_KEY);
-              } catch (e) { /* ignore */ }
-
-              if (currentSubmittedId === preset.id) {
-                setAlreadySubmitted(true);
-                pushLog("Current preset already submitted.");
-              } else {
-                setAlreadySubmitted(false);
-              }
-            }
-          } catch (e) { pushLog(`Sync error: ${String(e)}`); }
-        };
-        void sync();
-        }
+      } else {
+        void syncPreset();
+      }
 
     } catch (globalError) {
-      console.error("Critical mount error:", globalError);
       pushLog(`CRITICAL MOUNT ERROR: ${String(globalError)}`);
     }
-  }, [pushLog]);
+  }, [pushLog, syncPreset]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>, polygonId: string) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    pushLog(`Start: ${file.name} (${Math.round(file.size/1024)}KB)`);
-
     try {
-      // ユーティリティを使用して最初から圧縮された画像を取得する
       const optimized = await compressImage(file, pushLog);
-
-      pushLog(`Optimized: ${Math.round(optimized.length / 1024)}KB`);
-
       setImages(prev => {
         const next = { ...prev, [polygonId]: optimized };
-        try { 
-          localStorage.setItem(IMAGES_KEY, JSON.stringify(next)); 
-        } catch (e) {
-          pushLog("LS save failed (quota?)");
-        }
+        localStorage.setItem(IMAGES_KEY, JSON.stringify(next)); 
         return next;
       });
       pushLog(`Success: ${polygonId} set`);
@@ -216,15 +146,14 @@ export function useCollageCapture() {
     setErrorMessage("");
     try {
       pushLog("Generating collage image...");
-      const collageDataUrl = await generateCollageImage(template, images);
-      pushLog("Collage image generated.");
-      setCollageDataUrl(collageDataUrl);
+      const generatedUrl = await generateCollageImage(template, images);
+      setCollageDataUrl(generatedUrl);
 
       const res = await submitCollageData({
         userId,
         templateId: template.id,
         presetId: presetId,
-        collageDataUrl,
+        collageDataUrl: generatedUrl,
         items: template.polygons.map(p => ({
           polygonId: p.id, theme: themeMap[p.id] || "", dataUrl: images[p.id] || ""
         })),
@@ -235,21 +164,23 @@ export function useCollageCapture() {
       setSubmissionCount(newCount);
       localStorage.setItem(SUBMISSION_COUNT_KEY, newCount.toString());
       
+      // 履歴に追加
+      const historyItem: CollageHistoryItem = {
+        id: res.id,
+        dataUrl: generatedUrl,
+        createdAt: new Date().toISOString(),
+        placementLabel: res.placementLabel,
+      };
+      const newHistory = [historyItem, ...collageHistory];
+      setCollageHistory(newHistory);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+
       localStorage.removeItem(IMAGES_KEY);
-      // PRESETは次の投稿でも使うかもしれないので、新しく取得し直すかそのままにする
-      // ここでは一度消して、次の投稿のためにリセットする
-      localStorage.removeItem(PRESET_KEY);
-      localStorage.setItem(SUBMITTED_KEY, presetId);
-      setAlreadySubmitted(true);
-      pushLog("Submission complete. Waiting for manual reset or preset change.");
+      pushLog("Submission complete.");
 
     } catch (e: any) { 
       pushLog(`Submit failed: ${String(e)}`);
       setErrorMessage(`${e}`); 
-      if (String(e).includes("ALREADY_SUBMITTED")) {
-        setAlreadySubmitted(true);
-        localStorage.setItem(SUBMITTED_KEY, presetId);
-      }
     } finally { 
       setSubmitting(false); 
     }
@@ -257,4 +188,3 @@ export function useCollageCapture() {
 
   return { template, themeMap, images, errorMessage, submitting, result, collageDataUrl, alreadySubmitted, submissionCount, handleFileChange, submit, reset, pushLog };
 }
-
