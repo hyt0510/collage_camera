@@ -34,7 +34,10 @@ export function useCollageCapture() {
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
 
-  const pushLog = useCallback((_msg: string) => {}, []);
+  const pushLog = useCallback((_msg: string) => {
+    // デバッグ用
+    console.log(`[CollageLog] ${_msg}`);
+  }, []);
 
   const reset = useCallback(() => {
     setResult(null);
@@ -43,6 +46,17 @@ export function useCollageCapture() {
     localStorage.removeItem(IMAGES_KEY);
     pushLog("UI Reset for new submission");
   }, [pushLog]);
+
+  // localStorage同期
+  useEffect(() => {
+    if (Object.keys(images).length > 0) {
+      try {
+        localStorage.setItem(IMAGES_KEY, JSON.stringify(images));
+      } catch (e) {
+        pushLog("localStorage sync failed (quota?)");
+      }
+    }
+  }, [images, pushLog]);
 
   const syncPreset = useCallback(async () => {
     try {
@@ -89,7 +103,8 @@ export function useCollageCapture() {
       const savedHistory = localStorage.getItem(HISTORY_KEY);
       if (savedHistory) {
         try {
-          setCollageHistory(JSON.parse(savedHistory));
+          const parsed = JSON.parse(savedHistory);
+          if (Array.isArray(parsed)) setCollageHistory(parsed.slice(0, 5));
         } catch (e) {
           pushLog("History restoration failed");
         }
@@ -123,11 +138,7 @@ export function useCollageCapture() {
 
     try {
       const optimized = await compressImage(file, pushLog);
-      setImages(prev => {
-        const next = { ...prev, [polygonId]: optimized };
-        localStorage.setItem(IMAGES_KEY, JSON.stringify(next)); 
-        return next;
-      });
+      setImages(prev => ({ ...prev, [polygonId]: optimized }));
       pushLog(`Success: ${polygonId} set`);
     } catch (e) {
       pushLog(`Error during capture: ${String(e)}`);
@@ -161,16 +172,21 @@ export function useCollageCapture() {
       setSubmissionCount(newCount);
       localStorage.setItem(SUBMISSION_COUNT_KEY, newCount.toString());
       
-      // 履歴に追加
+      // 履歴に追加 (最大5件)
       const historyItem: CollageHistoryItem = {
         id: res.id,
         dataUrl: generatedUrl,
         createdAt: new Date().toISOString(),
         placementLabel: res.placementLabel,
       };
-      const newHistory = [historyItem, ...collageHistory];
+      const newHistory = [historyItem, ...collageHistory].slice(0, 5);
       setCollageHistory(newHistory);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+      
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+      } catch (e) {
+        pushLog("History save failed (quota?)");
+      }
 
       localStorage.removeItem(IMAGES_KEY);
       pushLog("Submission complete.");

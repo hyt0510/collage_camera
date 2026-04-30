@@ -34,7 +34,7 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         clearTimeout(timeout);
         onLog(`Image decoded: ${img.width}x${img.height}`);
         
-        const MAX = 1000;
+        const MAX = 800; // 1000から800に縮小
         const scale = Math.min(1, MAX / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -50,7 +50,7 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         onLog("DrawImage to canvas ok");
         
-        const result = canvas.toDataURL("image/webp", 0.75);
+        const result = canvas.toDataURL("image/webp", 0.6); // 0.75から0.6に
         onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64 (webp)`);
         resolve(result);
       };
