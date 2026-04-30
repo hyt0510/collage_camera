@@ -2,7 +2,14 @@ import { FrameTemplate } from "@/lib/collage-config";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#ef4444", "#f59e0b", "#84cc16", "#06b6d4", "#3b82f6", "#a855f7"];
-// ... rest of imports unchanged
+
+type Props = {
+  template: FrameTemplate;
+  images: Record<string, string>;
+  themeMap: Record<string, string>;
+  onFileChange: (event: React.ChangeEvent<HTMLInputElement>, polygonId: string) => void;
+  onLog: (msg: string) => void;
+};
 
 export function CollageFrame({ template, images, themeMap, onFileChange, onLog }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
