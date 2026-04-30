@@ -86,7 +86,7 @@ export default function MonitorPage() {
                 </>
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="text-zinc-800 text-xs font-mono">{row}-{col}</span>
+                  <span className="text-zinc-900/50 text-xs font-mono">waiting...</span>
                 </div>
               )}
             </div>

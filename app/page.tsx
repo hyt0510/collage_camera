@@ -5,7 +5,7 @@ import { CollageFrame } from "@/components/features/collage/CollageFrame";
 
 export default function Home() {
   const {
-    template, themeMap, images, logs, errorMessage,
+    template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, alreadySubmitted, submissionCount,
     handleFileChange, submit, reset, pushLog
   } = useCollageCapture();
@@ -119,20 +119,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* デバッグログ（テスト時のみ表示） */}
-      <section className="rounded-2xl bg-zinc-900 p-4 shadow-xl">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">System Console</h3>
-          <span className="text-[10px] text-zinc-600 font-mono">v14.firebase</span>
-        </div>
-        <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
-          {logs.map((log, i) => (
-            <div key={i} className="text-[10px] font-mono text-emerald-400/80 break-all leading-tight border-b border-emerald-900/20 pb-0.5">
-              {log}
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* 完了 */}
     </main>
   );
 }

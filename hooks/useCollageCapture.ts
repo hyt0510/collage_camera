@@ -22,7 +22,6 @@ export function useCollageCapture() {
   });
 
   const [images, setImages] = useState<Record<string, string>>({});
-  const [logs, setLogs] = useState<string[]>(["[System] Initializing hook..."]);
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -31,13 +30,8 @@ export function useCollageCapture() {
   const [submissionCount, setSubmissionCount] = useState(0);
 
   const pushLog = useCallback((msg: string) => {
-    const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    console.log(line);
-    setLogs(prev => [line, ...prev].slice(0, 30));
-    // サーバーへの送信はバックグラウンドで実行
-    setTimeout(() => {
-      sendDebugLogToTerminal(line).catch(() => {});
-    }, 0);
+    // 運用時はコンソールのみに出力（または必要に応じて完全に消去）
+    console.log(`[Collage] ${msg}`);
   }, []);
 
   const reset = useCallback(() => {
@@ -261,6 +255,6 @@ export function useCollageCapture() {
     }
   };
 
-  return { template, themeMap, images, logs, errorMessage, submitting, result, collageDataUrl, alreadySubmitted, submissionCount, handleFileChange, submit, reset, pushLog };
+  return { template, themeMap, images, errorMessage, submitting, result, collageDataUrl, alreadySubmitted, submissionCount, handleFileChange, submit, reset, pushLog };
 }
 

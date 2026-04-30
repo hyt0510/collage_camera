@@ -95,6 +95,28 @@ export default function AdminPage() {
     await refresh();
   }
 
+  async function remove(id: string) {
+    if (!confirm("本当にこの投稿を削除しますか？\n(Storageからも画像が削除されます)")) return;
+    
+    const response = await fetch(`/api/submissions/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setError("削除に失敗しました。");
+      return;
+    }
+    await refresh();
+  }
+
+  async function removeAll() {
+    if (!confirm("【警告】すべての投稿を削除しますか？\n(すべての画像データがStorageから削除され、復元できません)")) return;
+    
+    const response = await fetch("/api/submissions", { method: "DELETE" });
+    if (!response.ok) {
+      setError("一括削除に失敗しました。");
+      return;
+    }
+    await refresh();
+  }
+
   async function assignPreset() {
     if (!selectedPresetId) {
       setError("割り当てるプリセットを選択してください。");
@@ -120,11 +142,19 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl p-4">
-      <header className="rounded-2xl bg-white p-4 shadow-sm">
-        <h1 className="text-xl font-bold text-zinc-900">運営管理画面</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          手動審査待ち: <span className="font-semibold">{pendingCount}</span> 件
-        </p>
+      <header className="rounded-2xl bg-white p-4 shadow-sm flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900">運営管理画面</h1>
+          <p className="mt-1 text-sm text-zinc-600">
+            手動審査待ち: <span className="font-semibold">{pendingCount}</span> 件
+          </p>
+        </div>
+        <button
+          onClick={removeAll}
+          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors"
+        >
+          全投稿を一括削除
+        </button>
       </header>
 
       {error ? (
@@ -210,6 +240,13 @@ export default function AdminPage() {
                     className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white"
                   >
                     バザー券消込
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(submission.id)}
+                    className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white"
+                  >
+                    削除
                   </button>
                 </div>
               </div>

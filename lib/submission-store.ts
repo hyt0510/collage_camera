@@ -237,3 +237,50 @@ export async function updateSubmissionStatus(
   const updated = await ref.get();
   return (updated.data() as Submission) ?? null;
 }
+
+export async function deleteSubmission(id: string): Promise<boolean> {
+  const ref = db.collection("submissions").doc(id);
+  const doc = await ref.get();
+  if (!doc.exists) return false;
+
+  const submission = doc.data() as Submission;
+
+  // 1. Storageから画像を削除
+  const deleteImage = async (url?: string) => {
+    if (!url) return;
+    try {
+      // urlは https://storage.googleapis.com/[bucket-name]/[path] の形式
+      // パス部分を抽出
+      const prefix = `https://storage.googleapis.com/${bucket.name}/`;
+      if (url.startsWith(prefix)) {
+        const path = url.replace(prefix, "");
+        await bucket.file(path).delete().catch(e => console.warn(`Storage delete failed for ${path}:`, e.message));
+      }
+    } catch (e) {
+      console.warn("Image deletion skip:", e);
+    }
+  };
+
+  await Promise.all([
+    ...submission.items.map(item => deleteImage(item.imageUrl)),
+    deleteImage(submission.collageImageUrl)
+  ]);
+
+  // 2. Firestoreからドキュメントを削除
+  await ref.delete();
+  return true;
+}
+
+export async function deleteAllSubmissions(): Promise<number> {
+  const snapshot = await db.collection("submissions").get();
+  let count = 0;
+
+  // Firestoreのバッチ削除とStorageの削除を並行実行（件数が多い場合は制限が必要だが、今回は200件程度を想定）
+  // シンプルに一件ずつdeleteSubmissionを呼ぶ（Storage削除も含むため）
+  for (const doc of snapshot.docs) {
+    await deleteSubmission(doc.id);
+    count++;
+  }
+
+  return count;
+}
