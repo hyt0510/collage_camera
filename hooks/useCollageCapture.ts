@@ -159,8 +159,9 @@ export function useCollageCapture() {
         templateId: template.id,
         presetId: presetId,
         collageDataUrl: generatedUrl,
+        // 個別画像は重いため、サーバーには送らずテーマ情報のみ送る（または空にする）
         items: template.polygons.map(p => ({
-          polygonId: p.id, theme: themeMap[p.id] || "", dataUrl: images[p.id] || ""
+          polygonId: p.id, theme: themeMap[p.id] || "", dataUrl: "" // ここを空にする
         })),
       });
       setResult(res);
