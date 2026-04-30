@@ -80,8 +80,6 @@ export async function createSubmission(input: {
   collageDataUrl?: string;
   items: Array<SubmissionItemInput & { moderation: ModerationResult }>;
 }): Promise<Submission> {
-  
-  console.log("Starting createSubmission process...");
 
   // 1ユーザー1投稿制限のチェックは廃止
   
@@ -101,11 +99,8 @@ export async function createSubmission(input: {
     if (input.collageDataUrl) {
       // ファイル拡張子を.webpに変更
       const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
-      console.log(`Uploading Collage to Storage (WebP): ${collagePath}`);
       collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
     }
-
-    console.log("Step 1: Collage image uploaded to Storage.");
   } catch (e: any) {
     console.error("Step 1 FAILED (Storage):", e.message);
     throw new Error(`Storage Error: ${e.message}`);
@@ -127,7 +122,6 @@ export async function createSubmission(input: {
 
     if (availablePlacements.length > 0) {
       placement = availablePlacements[Math.floor(Math.random() * availablePlacements.length)]!;
-      console.log(`Smart Placement: Picked empty slot "${placement.label}"`);
     }
   } catch (e) {
     console.warn("Smart Placement failed, falling back to random:", e);
@@ -148,9 +142,7 @@ export async function createSubmission(input: {
 
   // 3. Firestore保存
   try {
-    console.log(`Attempting Firestore save to project: ${process.env.FIREBASE_PROJECT_ID}...`);
     await submissionRef.set(submission);
-    console.log("Step 3: Firestore save successful!");
   } catch (e: any) {
     console.error("Step 3 FAILED (Firestore):", e.message);
     throw e;

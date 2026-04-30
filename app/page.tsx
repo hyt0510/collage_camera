@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useCollageCapture, CollageHistoryItem } from "@/hooks/useCollageCapture";
+import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 
 export default function Home() {
   const {
-    template, themeMap, images, logs, errorMessage,
+    template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
     handleFileChange, submit, reset, pushLog
   } = useCollageCapture();
@@ -171,20 +171,6 @@ export default function Home() {
           )}
         </section>
       )}
-
-      {/* デバッグログ（開発用） */}
-      <section className="rounded-2xl bg-zinc-900 p-4 shadow-xl mt-auto">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">System Console</h3>
-        </div>
-        <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
-          {logs.map((log, i) => (
-            <div key={i} className="text-[10px] font-mono text-emerald-400/80 break-all leading-tight">
-              {log}
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }
