@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 
 /**
- * Firebase Admin SDK の初期化
+ * Firebase Admin SDK 初期化
  */
 
 if (!admin.apps.length) {
@@ -10,33 +10,29 @@ if (!admin.apps.length) {
   const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey: privateKey ? privateKey.replace(/\\n/g, "\n") : undefined,
-      }),
-      storageBucket,
-    });
-  } catch (error) {
-    console.error("SDK Init Error:", error);
+  if (projectId && clientEmail && privateKey) {
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey: privateKey.replace(/\\n/g, "\n"),
+        }),
+        storageBucket,
+      });
+    } catch (error) {
+      console.error("SDK Init Error:", error);
+    }
+  } else {
+    console.warn("Firebase Admin SDK environment variables are missing. Skipping initialization during build.");
   }
 }
 
-export const db = admin.firestore();
-export const bucket = admin.storage().bucket();
+// 実行時エラーを防ぐため、appがある場合のみサービスを取得
+export const db = admin.apps.length 
+  ? admin.firestore() 
+  : (null as unknown as admin.firestore.Firestore);
 
-// --- 起動時の自動診断ロジック ---
-(async () => {
-  try {
-    // データベースの存在を確認
-    await db.listCollections();
-  } catch (e: any) {
-    console.error("❌ Firestore Database NOT FOUND (5 NOT_FOUND)");
-    console.error("--------------------------------------------------");
-    console.error("【解決策】以下のURLをブラウザで開き、'データベースの作成' ボタンを完了させてください。");
-    console.error(`https://console.firebase.google.com/u/0/project/${process.env.FIREBASE_PROJECT_ID}/firestore`);
-    console.error("--------------------------------------------------");
-  }
-})();
+export const bucket = admin.apps.length 
+  ? admin.storage().bucket() 
+  : (null as unknown as any);
