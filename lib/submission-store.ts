@@ -1,5 +1,6 @@
 import "server-only";
 import { db, bucket } from "./firebase-admin";
+import { generateCollageMosaicPlacements } from "./utils/mosaic";
 
 export type ModerationStatus =
   | "approved"
@@ -21,7 +22,7 @@ export type SubmissionItemInput = {
 export type SubmissionItem = {
   polygonId: string;
   theme: string;
-  imageUrl?: string; // 個別画像URLはオプショナルに（保存しないため）
+  imageUrl?: string;
   moderation: ModerationResult;
 };
 
@@ -44,17 +45,8 @@ export type Submission = {
   collageImageUrl?: string;
 };
 
-const placements: Placement[] = [
-  { row: 0, col: 0, label: "左上エリア" },
-  { row: 0, col: 1, label: "上部中央エリア" },
-  { row: 0, col: 2, label: "右上エリア" },
-  { row: 1, col: 0, label: "左側エリア" },
-  { row: 1, col: 1, label: "中央エリア" },
-  { row: 1, col: 2, label: "右側エリア" },
-  { row: 2, col: 0, label: "左下エリア" },
-  { row: 2, col: 1, label: "下部中央エリア" },
-  { row: 2, col: 2, label: "右下エリア" },
-];
+// モザイク用の座標プールを生成
+const MOSAIC_PLACEMENTS = generateCollageMosaicPlacements();
 
 async function uploadBase64Image(dataUrl: string, path: string): Promise<string> {
   const base64Data = dataUrl.split(";base64,").pop();
@@ -81,23 +73,18 @@ export async function createSubmission(input: {
   items: Array<SubmissionItemInput & { moderation: ModerationResult }>;
 }): Promise<Submission> {
 
-  // 1ユーザー1投稿制限のチェックは廃止
-
   // 1. 画像アップロード
   let items: SubmissionItem[];
   let collageImageUrl: string | undefined;
 
   try {
-    // 個別画像はストレージに保存せず、メタデータ（検閲結果など）のみ保持する
     items = input.items.map((item) => ({
       polygonId: item.polygonId,
       theme: item.theme,
       moderation: item.moderation,
     }));
 
-    // コラージュ全体の画像のみをアップロード
     if (input.collageDataUrl) {
-      // ファイル拡張子を.webpに変更
       const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
       collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
     }
@@ -110,8 +97,8 @@ export async function createSubmission(input: {
   const submissionRef = db.collection("submissions").doc();
   const submissionId = submissionRef.id;
 
-  // 読み取りを減らすため、既存の投稿を確認せずランダムに配置を決定
-  const placement = placements[Math.floor(Math.random() * placements.length)]!;
+  // 読み取りを減らすため、既存の投稿を確認せずモザイク座標プールからランダムに配置を決定
+  const placement = MOSAIC_PLACEMENTS[Math.floor(Math.random() * MOSAIC_PLACEMENTS.length)]!;
 
   const submission: Submission = {
     id: submissionId,
@@ -142,18 +129,10 @@ export async function listApprovedSubmissions(): Promise<Submission[]> {
     const snapshot = await db.collection("submissions")
       .where("status", "==", "approved")
       .orderBy("createdAt", "desc")
-      .limit(100)
+      .limit(200) // モザイク用に取得件数を増やす
       .get();
     return snapshot.docs.map(doc => doc.data() as Submission);
   } catch (e: any) {
-    if (e.message.includes("index") || e.code === 9) {
-      const snapshot = await db.collection("submissions")
-        .where("status", "==", "approved")
-        .limit(100)
-        .get();
-      const docs = snapshot.docs.map(doc => doc.data() as Submission);
-      return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    }
     console.error("Firestore list error:", e);
     return [];
   }
@@ -163,17 +142,10 @@ export async function listAllSubmissions(): Promise<Submission[]> {
   try {
     const snapshot = await db.collection("submissions")
       .orderBy("createdAt", "desc")
-      .limit(200)
+      .limit(500)
       .get();
     return snapshot.docs.map((doc) => doc.data() as Submission);
   } catch (e: any) {
-    if (e.message?.includes("index") || e.code === 9) {
-      const snapshot = await db.collection("submissions")
-        .limit(200)
-        .get();
-      const docs = snapshot.docs.map((doc) => doc.data() as Submission);
-      return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    }
     console.error("Firestore list(all) error:", e);
     return [];
   }
@@ -204,12 +176,9 @@ export async function deleteSubmission(id: string): Promise<boolean> {
 
   const submission = doc.data() as Submission;
 
-  // 1. Storageから画像を削除
   const deleteImage = async (url?: string) => {
     if (!url) return;
     try {
-      // urlは https://storage.googleapis.com/[bucket-name]/[path] の形式
-      // パス部分を抽出
       const prefix = `https://storage.googleapis.com/${bucket.name}/`;
       if (url.startsWith(prefix)) {
         const path = url.replace(prefix, "");
@@ -225,7 +194,6 @@ export async function deleteSubmission(id: string): Promise<boolean> {
     deleteImage(submission.collageImageUrl)
   ]);
 
-  // 2. Firestoreからドキュメントを削除
   await ref.delete();
   return true;
 }
@@ -233,13 +201,9 @@ export async function deleteSubmission(id: string): Promise<boolean> {
 export async function deleteAllSubmissions(): Promise<number> {
   const snapshot = await db.collection("submissions").get();
   let count = 0;
-
-  // Firestoreのバッチ削除とStorageの削除を並行実行（件数が多い場合は制限が必要だが、今回は200件程度を想定）
-  // シンプルに一件ずつdeleteSubmissionを呼ぶ（Storage削除も含むため）
   for (const doc of snapshot.docs) {
     await deleteSubmission(doc.id);
     count++;
   }
-
   return count;
 }
