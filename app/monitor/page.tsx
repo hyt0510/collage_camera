@@ -14,43 +14,60 @@ type MonitorSubmission = {
 export default function MonitorPage() {
   const [submissions, setSubmissions] = useState<MonitorSubmission[]>([]);
   const [popup, setPopup] = useState<MonitorSubmission | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const knownIds = useRef<Set<string>>(new Set());
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
-    // Firestoreから承認済みの投稿をリアルタイムで購読
-    const q = query(
-      collection(db, "submissions"),
-      where("status", "==", "approved"),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
+    // Firebase Configの存在確認
+    if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+      setError("Environment variables (NEXT_PUBLIC_FIREBASE_PROJECT_ID) are missing. Please set them in Vercel settings.");
+      return;
+    }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const nextItems = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as MonitorSubmission[];
+    try {
+      const q = query(
+        collection(db, "submissions"),
+        where("status", "==", "approved"),
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
 
-      // 新着チェック（ポップアップ表示用）
-      const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
-      
-      // 初回ロード時はポップアップを出さない
-      if (!isFirstLoad.current && newItems.length > 0) {
-        const latest = newItems[0]!;
-        setPopup(latest);
-        const timer = window.setTimeout(() => setPopup(null), 3000);
-        return () => window.clearTimeout(timer);
-      }
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setError(null);
+        const nextItems = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as MonitorSubmission[];
 
-      knownIds.current = new Set(nextItems.map((item) => item.id));
-      setSubmissions(nextItems);
-      isFirstLoad.current = false;
-    }, (error) => {
-      console.error("Firestore onSnapshot error:", error);
-    });
+        // 新着チェック（ポップアップ表示用）
+        const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
+        
+        // 初回ロード時はポップアップを出さない
+        if (!isFirstLoad.current && newItems.length > 0) {
+          const latest = newItems[0]!;
+          setPopup(latest);
+          const timer = window.setTimeout(() => setPopup(null), 3000);
+          return () => window.clearTimeout(timer);
+        }
 
-    return () => unsubscribe();
+        knownIds.current = new Set(nextItems.map((item) => item.id));
+        setSubmissions(nextItems);
+        isFirstLoad.current = false;
+      }, (err) => {
+        console.error("Firestore onSnapshot error:", err);
+        let msg = `Firestore Error: ${err.message}`;
+        if (err.code === "failed-precondition") {
+          msg = "Index Error: You need to create a composite index in the Firebase Console. Check the browser console for the direct link.";
+        }
+        setError(msg);
+      });
+
+      return () => unsubscribe();
+    } catch (e: any) {
+      console.error("Firebase setup error:", e);
+      setError(`Setup Error: ${e.message}`);
+    }
   }, []);
 
   const grid = useMemo(() => {
@@ -76,7 +93,14 @@ export default function MonitorPage() {
       </header>
 
       <section className="grid min-h-[85vh] grid-cols-3 gap-3">
-        {Array.from({ length: 9 }).map((_, index) => {
+        {error ? (
+          <div className="col-span-3 flex items-center justify-center p-10 text-center">
+            <div className="rounded-2xl bg-rose-500/10 p-6 border border-rose-500/20 max-w-md">
+              <p className="text-rose-500 font-bold mb-2">Connection Error</p>
+              <p className="text-zinc-400 text-xs leading-relaxed">{error}</p>
+            </div>
+          </div>
+        ) : Array.from({ length: 9 }).map((_, index) => {
           const row = Math.floor(index / 3);
           const col = index % 3;
           const item = grid.get(`${row}-${col}`);
