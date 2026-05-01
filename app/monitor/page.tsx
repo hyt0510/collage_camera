@@ -104,22 +104,41 @@ export default function MonitorPage() {
           const row = Math.floor(index / 3);
           const col = index % 3;
           const item = grid.get(`${row}-${col}`);
-          const displayUrl = item?.collageDataUrl || (item?.items && item.items[0]?.dataUrl);
+          
+          // 表示する画像の優先順位: 1. コラージュ全体, 2. 個別アイテムの1枚目
+          let displayUrl = "";
+          if (item) {
+            if (item.collageDataUrl) {
+              displayUrl = item.collageDataUrl;
+            } else if (item.items && item.items.length > 0 && item.items[0]?.dataUrl) {
+              displayUrl = item.items[0].dataUrl;
+            }
+          }
           
           return (
             <div
               key={`${row}-${col}`}
               className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-white/5 bg-zinc-900/50 shadow-2xl transition-all duration-700"
             >
-              {displayUrl ? (
+              {item && displayUrl ? (
                 <>
                   <img
                     src={displayUrl}
                     alt="collage"
                     className="h-full w-full object-cover animate-in fade-in zoom-in-95 duration-1000"
+                    onError={(e) => {
+                      console.warn("Image load failed:", displayUrl);
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                 </>
+              ) : item ? (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
+                  <div className="text-[10px] text-zinc-600 break-all font-mono">
+                    Data Received<br/>(No Image)
+                  </div>
+                </div>
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-2">
                   <div className="h-1 w-1 animate-ping rounded-full bg-indigo-500/50" />
@@ -139,11 +158,14 @@ export default function MonitorPage() {
               New Fragment Received
             </div>
             <div className="overflow-hidden rounded-3xl border-4 border-white/10 bg-zinc-900 shadow-[0_0_80px_rgba(79,70,229,0.3)]">
-              <img
-                src={popup.collageDataUrl || (popup.items && popup.items[0]?.dataUrl)}
-                alt="new collage"
-                className="h-80 w-80 object-cover"
-              />
+              {(() => {
+                const pUrl = popup.collageDataUrl || (popup.items && popup.items[0]?.dataUrl);
+                return pUrl ? (
+                  <img src={pUrl} alt="new collage" className="h-80 w-80 object-cover" />
+                ) : (
+                  <div className="h-80 w-80 flex items-center justify-center bg-zinc-800 text-xs">No Preview</div>
+                );
+              })()}
             </div>
           </div>
         </div>
