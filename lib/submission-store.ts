@@ -82,7 +82,7 @@ export async function createSubmission(input: {
 }): Promise<Submission> {
 
   // 1ユーザー1投稿制限のチェックは廃止
-  
+
   // 1. 画像アップロード
   let items: SubmissionItem[];
   let collageImageUrl: string | undefined;
@@ -98,7 +98,7 @@ export async function createSubmission(input: {
     // コラージュ全体の画像のみをアップロード
     if (input.collageDataUrl) {
       // ファイル拡張子を.webpに変更
-      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
+      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.jpg`;
       collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
     }
   } catch (e: any) {
