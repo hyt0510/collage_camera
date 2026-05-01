@@ -7,8 +7,9 @@ import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/f
 type MonitorSubmission = {
   id: string;
   placement: { row: number; col: number };
-  items: Array<{ dataUrl: string; theme: string }>;
-  collageDataUrl?: string;
+  items: Array<{ imageUrl?: string; dataUrl?: string; theme: string }>;
+  collageImageUrl?: string;
+  collageDataUrl?: string; // 互換性のため残す
 };
 
 export default function MonitorPage() {
@@ -105,13 +106,15 @@ export default function MonitorPage() {
           const col = index % 3;
           const item = grid.get(`${row}-${col}`);
           
-          // 表示する画像の優先順位: 1. コラージュ全体, 2. 個別アイテムの1枚目
+          // 表示する画像の優先順位
           let displayUrl = "";
           if (item) {
-            if (item.collageDataUrl) {
-              displayUrl = item.collageDataUrl;
-            } else if (item.items && item.items.length > 0 && item.items[0]?.dataUrl) {
-              displayUrl = item.items[0].dataUrl;
+            // 1. コラージュ画像 (新: collageImageUrl, 旧: collageDataUrl)
+            displayUrl = item.collageImageUrl || item.collageDataUrl || "";
+            
+            // 2. 個別アイテムの1枚目 (新: items[0].imageUrl, 旧: items[0].dataUrl)
+            if (!displayUrl && item.items && item.items.length > 0) {
+              displayUrl = item.items[0].imageUrl || item.items[0].dataUrl || "";
             }
           }
           
