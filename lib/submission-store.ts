@@ -182,9 +182,9 @@ export async function deleteSubmission(id: string): Promise<boolean> {
       const prefix = `https://storage.googleapis.com/${bucket.name}/`;
       if (url.startsWith(prefix)) {
         const path = url.replace(prefix, "");
-        await bucket.file(path).delete().catch(e => console.warn(`Storage delete failed for ${path}:`, e.message));
+        await bucket.file(path).delete().catch((e: any) => console.warn(`Storage delete failed for ${path}:`, e.message));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Image deletion skip:", e);
     }
   };
