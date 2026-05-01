@@ -98,7 +98,7 @@ export async function createSubmission(input: {
     // コラージュ全体の画像のみをアップロード
     if (input.collageDataUrl) {
       // ファイル拡張子を.webpに変更
-      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.jpg`;
+      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
       collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
     }
   } catch (e: any) {
@@ -110,22 +110,8 @@ export async function createSubmission(input: {
   const submissionRef = db.collection("submissions").doc();
   const submissionId = submissionRef.id;
 
-  let placement = placements[Math.floor(Math.random() * placements.length)]!;
-  try {
-    const activeSubmissions = await db.collection("submissions")
-      .where("status", "in", ["approved", "pending_manual"])
-      .limit(20)
-      .get();
-    
-    const occupiedLabels = new Set(activeSubmissions.docs.map(doc => doc.data().placement.label));
-    const availablePlacements = placements.filter(p => !occupiedLabels.has(p.label));
-
-    if (availablePlacements.length > 0) {
-      placement = availablePlacements[Math.floor(Math.random() * availablePlacements.length)]!;
-    }
-  } catch (e) {
-    console.warn("Smart Placement failed, falling back to random:", e);
-  }
+  // 読み取りを減らすため、既存の投稿を確認せずランダムに配置を決定
+  const placement = placements[Math.floor(Math.random() * placements.length)]!;
 
   const submission: Submission = {
     id: submissionId,
