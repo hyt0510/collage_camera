@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import { User } from "firebase/auth";
 import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
 import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 
 const IMAGES_KEY = "collage_v10_img";
 const PRESET_KEY = "collage_v10_preset";
-const USER_ID_KEY = "collage_v10_uid";
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
 const HISTORY_KEY = "collage_v10_history";
 
@@ -16,8 +16,8 @@ export interface CollageHistoryItem {
   placementLabel: string;
 }
 
-export function useCollageCapture() {
-  const [userId, setUserId] = useState<string>("");
+export function useCollageCapture(user: User | null) {
+  const userId = user?.uid ?? "";
   const [presetId, setPresetId] = useState<string>("");
   const [template, setTemplate] = useState<FrameTemplate>(() => FRAME_TEMPLATES[0]!);
   const [themeMap, setThemeMap] = useState<Record<string, string>>(() => {
@@ -86,13 +86,6 @@ export function useCollageCapture() {
   useEffect(() => {
     try {
       pushLog("--- Collage App Mounted ---");
-      
-      let uid = localStorage.getItem(USER_ID_KEY);
-      if (!uid) {
-        uid = `user_${Math.random().toString(36).slice(2, 11)}`;
-        localStorage.setItem(USER_ID_KEY, uid);
-      }
-      setUserId(uid);
 
       const savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
       if (savedCount) setSubmissionCount(parseInt(savedCount, 10));
@@ -146,13 +139,16 @@ export function useCollageCapture() {
   };
 
   const submit = async () => {
-    if (!template || !presetId) return;
+    if (!template || !presetId || !user) return;
     setSubmitting(true);
     setErrorMessage("");
     try {
       pushLog("Generating collage image...");
       const generatedUrl = await generateCollageImage(template, images);
       setCollageDataUrl(generatedUrl);
+
+      // Firebase IDトークンを取得
+      const idToken = await user.getIdToken();
 
       const res = await submitCollageData({
         userId,
@@ -163,7 +159,7 @@ export function useCollageCapture() {
         items: template.polygons.map(p => ({
           polygonId: p.id, theme: themeMap[p.id] || "", dataUrl: "" // ここを空にする
         })),
-      });
+      }, idToken);
       setResult(res);
       
       const newCount = submissionCount + 1;

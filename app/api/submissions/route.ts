@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as admin from "firebase-admin";
 import { db } from "@/lib/firebase-admin";
 import { moderateImage } from "@/lib/moderation";
 import {
@@ -16,6 +17,23 @@ function decideStatus(results: ModerationResult[]): ModerationStatus {
   // すべてが safe: true であるか、もしくは判定がスキップ(safe: null)されている場合は「承認済み」とする
   // これにより、APIキー未設定時でもモニターに表示されるようになる
   return "approved";
+}
+
+/**
+ * AuthorizationヘッダーからFirebase IDトークンを検証し、UIDを返す
+ */
+async function verifyAuthToken(request: Request): Promise<{ uid: string } | null> {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const idToken = authHeader.slice(7);
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    return { uid: decodedToken.uid };
+  } catch (e: any) {
+    console.error("Token verification failed:", e.message);
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -41,7 +59,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // 0. 接続テストを強制実行
+  // 0. Firebase IDトークン検証
+  const authResult = await verifyAuthToken(request);
+  if (!authResult) {
+    return NextResponse.json(
+      { error: "認証が必要です。ページを再読み込みしてください。" },
+      { status: 401 }
+    );
+  }
+  const userId = authResult.uid;
+
+  // 1. Firestore接続テスト
   try {
     await db.collection("_test").limit(1).get();
   } catch (error: any) {
@@ -60,11 +88,6 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
-
-  // 1. ユーザー識別（1人1投稿制限のため）
-  // 本来は認証トークンの検証を行うべきだが、簡易化のためbodyから受け取る。
-  // userIdがなければランダム生成などで代用することも検討。
-  const userId = body.userId || `anonymous_${Date.now()}`;
 
   // 2. 検閲 (APIキーが死んでいてもエラーにしない)
   // 個別画像のみ検閲対象とする

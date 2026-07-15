@@ -28,10 +28,13 @@ export async function submitCollageData(data: {
   presetId: string;
   collageDataUrl?: string;
   items: Array<{ polygonId: string; theme: string; dataUrl: string }>;
-}) {
+}, idToken: string) {
   const response = await fetch("/api/submissions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${idToken}`,
+    },
     body: JSON.stringify(data),
   });
 

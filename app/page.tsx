@@ -1,17 +1,48 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 
 export default function Home() {
+  const { user, loading: authLoading, error: authError } = useAuth();
+
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
     handleFileChange, submit, reset, pushLog
-  } = useCollageCapture();
+  } = useCollageCapture(user);
 
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
+
+  // 認証中のローディング表示
+  if (authLoading) {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
+        <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+        <p className="text-sm text-zinc-500">準備中...</p>
+      </main>
+    );
+  }
+
+  // 認証エラー表示
+  if (authError) {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
+        <div className="rounded-2xl bg-rose-50 p-6 border border-rose-200 text-center">
+          <p className="text-rose-700 font-bold">認証エラー</p>
+          <p className="mt-2 text-sm text-rose-600">{authError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-colors"
+          >
+            再読み込み
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   // 全枠埋まっているかチェック
   const allFilled = template?.polygons.every(p => !!images[p.id]) ?? false;
