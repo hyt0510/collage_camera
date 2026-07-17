@@ -11,9 +11,12 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-myanmar: var(--font-noto-myanmar);
+  --font-myanmar: var(--font-noto-myanmar);
 }
 
 body {
+  background-color: var(--background);
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
   background-color: var(--background);
   background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
   color: var(--foreground);
@@ -133,6 +136,63 @@ body {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* === Paper Collage & Scrapbook Theme === */
+
+/* マスキングテープ風 */
+.masking-tape {
+  position: relative;
+  display: inline-block;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 4px 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.masking-tape::before,
+.masking-tape::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: inherit;
+}
+
+.masking-tape::before {
+  left: -2px;
+  clip-path: polygon(0% 0%, 100% 5%, 0% 15%, 100% 25%, 0% 35%, 100% 45%, 0% 55%, 100% 65%, 0% 75%, 100% 85%, 0% 95%, 100% 100%);
+}
+
+.masking-tape::after {
+  right: -2px;
+  clip-path: polygon(100% 0%, 0% 10%, 100% 20%, 0% 30%, 100% 40%, 0% 50%, 100% 60%, 0% 70%, 100% 80%, 0% 90%, 100% 100%);
+}
+
+/* 写真を「貼る」アニメーション */
+.animate-paste-in {
+  animation: pasteIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes pasteIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.1) rotate(5deg) translateY(-10px);
+    filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg) translateY(0);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+  }
+}
+
+/* スクラップブックの写真風（白いフチ＋影） */
+.scrapbook-photo {
+  background-color: #f8f9fa;
+  padding: 6px 6px 20px 6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
 }
 
 /* === Paper Collage & Scrapbook Theme === */
