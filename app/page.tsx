@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
@@ -15,6 +15,17 @@ export default function Home() {
   } = useCollageCapture(user);
 
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // 選択中のテーマ情報
+  const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
+  const hasImageInSelected = selectedSlotId ? !!images[selectedSlotId] : false;
+
+  // 選択中スロットの色（SLOT_COLORSと同じ配列）
+  const SLOT_COLORS = ["#ef4444", "#f59e0b", "#84cc16", "#06b6d4", "#3b82f6", "#a855f7"];
+  const selectedSlotIndex = template?.polygons.findIndex(p => p.id === selectedSlotId) ?? -1;
+  const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#6366f1";
 
   // 認証中のローディング表示
   if (authLoading) {
@@ -55,7 +66,7 @@ export default function Home() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-20">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
       <header className="rounded-2xl bg-white/90 p-4 shadow-sm border border-zinc-200">
         <div className="flex justify-between items-start">
           <div>
@@ -94,6 +105,31 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* 選択中テーマの固定表示バー */}
+      {activeTab === "create" && !result && (
+        <div className="sticky top-0 z-10">
+          <div
+            className="rounded-xl px-4 py-3 shadow-sm border transition-all duration-200"
+            style={{
+              backgroundColor: selectedTheme ? `${selectedSlotColor}10` : "#f4f4f5",
+              borderColor: selectedTheme ? `${selectedSlotColor}40` : "#e4e4e7",
+            }}
+          >
+            {selectedTheme ? (
+              <div key={selectedSlotId} className="animate-theme-fade">
+                <p className="text-xs font-bold text-zinc-400 mb-0.5">📷 テーマ</p>
+                <p className="text-sm font-bold text-zinc-900 leading-snug">{selectedTheme}</p>
+                {hasImageInSelected && (
+                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ 撮影済み — タップで撮り直せます</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-400 text-center">枠をタップしてテーマを確認 👆</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === "create" ? (
         <>
@@ -138,32 +174,60 @@ export default function Home() {
                     template={template}
                     images={images}
                     themeMap={themeMap}
+                    selectedSlotId={selectedSlotId}
+                    onSlotSelect={setSelectedSlotId}
                     onFileChange={handleFileChange}
                     onLog={pushLog}
                   />
                 </section>
               )}
 
-              <section className="rounded-2xl bg-white p-4 shadow-sm border border-zinc-100">
-                <button
-                  type="button"
-                  onClick={submit}
-                  disabled={!allFilled || submitting}
-                  className="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform disabled:bg-zinc-300 disabled:shadow-none disabled:cursor-not-allowed"
-                >
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      投稿中...
-                    </span>
-                  ) : "作品をモニターに送る"}
-                </button>
-                {errorMessage && (
-                  <p className="mt-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-100 animate-pulse">
-                    ⚠️ {errorMessage}
-                  </p>
-                )}
-              </section>
+              {/* 進捗インジケーター */}
+              {template && (
+                <div className="flex items-center justify-center gap-2 py-1">
+                  {template.polygons.map((p, i) => (
+                    <div
+                      key={p.id}
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-200 ${
+                        images[p.id] ? "scale-100" : "scale-75 opacity-50"
+                      }`}
+                      style={{
+                        backgroundColor: images[p.id]
+                          ? SLOT_COLORS[i % SLOT_COLORS.length]
+                          : "#d4d4d8",
+                      }}
+                    />
+                  ))}
+                  <span className="ml-2 text-xs text-zinc-400 font-bold">
+                    {template.polygons.filter(p => images[p.id]).length}/{template.polygons.length}
+                  </span>
+                </div>
+              )}
+
+              {/* 投稿ボタン（全枠撮影済みの場合のみ表示） */}
+              {allFilled && (
+                <section className="rounded-2xl bg-white p-4 shadow-sm border border-zinc-100">
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={submitting}
+                    className="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform disabled:bg-zinc-300 disabled:shadow-none disabled:cursor-not-allowed"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        投稿中...
+                      </span>
+                    ) : "🎉 作品をモニターに送る"}
+                  </button>
+                </section>
+              )}
+
+              {errorMessage && (
+                <p className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-100 animate-pulse">
+                  ⚠️ {errorMessage}
+                </p>
+              )}
             </>
           )}
         </>
@@ -201,6 +265,37 @@ export default function Home() {
             </div>
           )}
         </section>
+      )}
+
+      {/* 下部固定カメラボタン — 枠選択中かつ作成タブかつ未投稿時のみ表示 */}
+      {activeTab === "create" && !result && selectedSlotId && template && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up">
+          <div className="mx-auto max-w-md px-4 pb-5 pt-3 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent">
+            <div
+              className="relative w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
+              style={{ backgroundColor: selectedSlotColor }}
+            >
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none gap-2">
+                <span>📸</span>
+                <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
+              </div>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => {
+                  if (selectedSlotId) {
+                    pushLog(`CAMERA INPUT CHANGED: ${selectedSlotId}`);
+                    handleFileChange(e, selectedSlotId);
+                  }
+                }}
+                onClick={() => pushLog(`CAMERA CLICKED: ${selectedSlotId}`)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
