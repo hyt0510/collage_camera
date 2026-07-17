@@ -260,7 +260,7 @@ export function CameraScreen({
                   className="rounded-sm px-4 py-3 shadow-md relative"
                   style={{ backgroundColor: "#fefce8", transform: "rotate(1deg)" }}
                 >
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-4 bg-white/50 -rotate-2 masking-tape" />
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: slotColor }} />
                   <p className="text-[10px] font-bold text-zinc-500 tracking-wider">テーマ</p>
                   <p className="text-base font-bold text-zinc-900 mt-0.5 leading-snug">{theme}</p>
                   <p className="text-[11px] text-zinc-500 mt-1.5 font-bold border-b border-zinc-200 inline-block pb-0.5">

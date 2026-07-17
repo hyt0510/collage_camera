@@ -3,10 +3,10 @@ import React from "react";
 import { FrameTemplate } from "@/lib/collage-config";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
-const SLOT_COLORS = ["#D62828", "#1E40AF", "#F4C430", "#1E1E1E", "#F5F3EE"];
+const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
 
 const getContrastColor = (hex: string) => 
-  (hex === "#F4C430" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
+  (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
 /** テーマ文字列を枠内ラベル用に短縮する */
 function shortenTheme(theme: string, maxLen = 5): string {

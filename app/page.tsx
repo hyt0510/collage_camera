@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
+import { CollageBackground } from "@/components/features/collage/CollageBackground";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -24,12 +25,12 @@ export default function Home() {
   const hasImageInSelected = selectedSlotId ? !!images[selectedSlotId] : false;
 
   // 選択中スロットの色（テープの色）
-  const SLOT_COLORS = ["#D62828", "#1E40AF", "#F4C430", "#1E1E1E", "#F5F3EE"];
+  const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
   const selectedSlotIndex = template?.polygons.findIndex(p => p.id === selectedSlotId) ?? -1;
-  const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#D62828";
+  const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#CA0000";
 
   const getContrastColor = (hex: string) => 
-    (hex === "#F4C430" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
+    (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
   // 認証中のローディング表示
   if (authLoading) {
@@ -70,13 +71,14 @@ export default function Home() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
+    <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28 overflow-hidden">
+      <CollageBackground />
       <header 
         className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
         style={{ transform: "rotate(-1deg)" }}
       >
-        <div className="absolute -top-2 left-4 w-12 h-4 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#D62828" }} />
-        <div className="absolute -top-2 right-4 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#1E40AF" }} />
+        <div className="absolute -top-2 left-4 w-12 h-4 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#CA0000" }} />
+        <div className="absolute -top-2 right-4 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#010193" }} />
         
         <div className="flex justify-between items-start pt-1">
           <div>
