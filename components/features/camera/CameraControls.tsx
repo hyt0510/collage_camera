@@ -82,12 +82,13 @@ export function CameraControls({
       {/* 下段: アルバム / シャッター / フラッシュ・カメラ切替 */}
       <div className="flex items-center justify-between">
         {/* アルバムから選択 */}
-        <div className="relative w-12 h-12">
+        <div className="relative w-14 h-14">
           <button
-            className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform"
+            className="w-14 h-14 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
+            style={{ transform: "rotate(-3deg)" }}
             aria-label="アルバムから選択"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
@@ -105,26 +106,34 @@ export function CameraControls({
         {/* シャッターボタン */}
         <button
           onClick={onShutter}
-          className="relative w-[72px] h-[72px] rounded-full flex items-center justify-center active:animate-shutter-pulse"
+          className="relative w-[80px] h-[80px] rounded-full flex items-center justify-center active:animate-shutter-pulse"
           aria-label="撮影"
         >
-          {/* 外リング */}
+          {/* 外リング (少しずらして手書き風に) */}
           <div
-            className="absolute inset-0 rounded-full border-[3px]"
-            style={{ borderColor: slotColor }}
+            className="absolute inset-0 rounded-full border-4 opacity-90"
+            style={{ borderColor: slotColor, transform: "rotate(15deg) scale(0.98)" }}
           />
-          {/* 内側の白い円 */}
-          <div className="w-[58px] h-[58px] rounded-full bg-white shadow-lg" />
+          <div
+            className="absolute inset-0 rounded-full border-4 opacity-50"
+            style={{ borderColor: slotColor, transform: "rotate(-10deg) scale(1.02)" }}
+          />
+          {/* 内側の白い円 (少し歪ませる) */}
+          <div 
+            className="w-[62px] h-[62px] bg-white shadow-lg" 
+            style={{ borderRadius: "48% 52% 47% 53% / 51% 49% 52% 48%" }}
+          />
         </button>
 
         {/* フラッシュ + カメラ切替 */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {flashSupported && (
             <button
               onClick={onToggleFlash}
-              className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all active:scale-90 ${
-                flashEnabled ? "bg-yellow-500/30 text-yellow-300" : "bg-white/15 text-white/60"
-              } border border-white/20`}
+              className={`w-12 h-12 flex items-center justify-center transition-all active:scale-95 shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] border-2 ${
+                flashEnabled ? "bg-yellow-400 text-yellow-900 border-yellow-200" : "bg-zinc-800 text-white border-white"
+              }`}
+              style={{ transform: "rotate(2deg)" }}
               aria-label="フラッシュ切替"
             >
               {flashEnabled ? (
@@ -132,7 +141,7 @@ export function CameraControls({
                   <path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z" />
                 </svg>
               ) : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z" />
                 </svg>
               )}
@@ -140,10 +149,11 @@ export function CameraControls({
           )}
           <button
             onClick={onToggleCamera}
-            className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform"
+            className="w-12 h-12 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
+            style={{ transform: "rotate(-2deg)" }}
             aria-label="カメラ切替"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
               <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
               <path d="m21 3-18 18" />
