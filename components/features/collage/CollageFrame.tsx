@@ -1,19 +1,27 @@
 
 import React from "react";
 import { FrameTemplate } from "@/lib/collage-config";
-import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox } from "@/lib/utils/styles";
+import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#ef4444", "#f59e0b", "#84cc16", "#06b6d4", "#3b82f6", "#a855f7"];
+
+/** テーマ文字列を枠内ラベル用に短縮する */
+function shortenTheme(theme: string, maxLen = 5): string {
+  if (theme.length <= maxLen) return theme;
+  return theme.slice(0, maxLen) + "…";
+}
 
 interface Props {
   template: FrameTemplate;
   images: Record<string, string>;
   themeMap: Record<string, string>;
+  selectedSlotId: string | null;
+  onSlotSelect: (slotId: string) => void;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>, id: string) => void;
   onLog: (msg: string) => void;
 }
 
-export function CollageFrame({ template, images, themeMap, onFileChange, onLog }: Props) {
+export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onFileChange, onLog }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;
@@ -26,11 +34,14 @@ export function CollageFrame({ template, images, themeMap, onFileChange, onLog }
           const image = images[polygon.id];
           const color = slotColorMap[polygon.id]!;
           const box = getPolygonBoundingBox(polygon.clipPath);
+          const center = getPolygonCenter(polygon.clipPath);
+          const isSelected = selectedSlotId === polygon.id;
+          const theme = themeMap[polygon.id] ?? "";
 
           return (
             <div
               key={`slot-${polygon.id}`}
-              className="absolute inset-0 overflow-hidden"
+              className="absolute inset-0 overflow-hidden cursor-pointer"
               style={{
                 clipPath: polygon.clipPath,
                 WebkitClipPath: polygon.clipPath,
@@ -43,6 +54,7 @@ export function CollageFrame({ template, images, themeMap, onFileChange, onLog }
                 backgroundRepeat: "no-repeat",
                 transform: "scale(1.02)", // 2%拡大して隙間を埋める
               }}
+              onClick={() => onSlotSelect(polygon.id)}
             >
               {image && (
                 <div 
@@ -64,21 +76,49 @@ export function CollageFrame({ template, images, themeMap, onFileChange, onLog }
                   />
                 </div>
               )}
+
+              {/* 未撮影時のテーマ短縮ラベル */}
+              {!image && (
+                <span
+                  className="pointer-events-none absolute flex flex-col items-center gap-1"
+                  style={{
+                    left: `${center.x}%`,
+                    top: `${center.y}%`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                >
+                  <span className="text-base leading-none">📷</span>
+                  <span
+                    className="rounded-full border bg-white/90 px-2 py-0.5 text-[10px] font-bold leading-tight text-zinc-700 shadow-sm whitespace-nowrap"
+                    style={{ borderColor: color }}
+                  >
+                    {shortenTheme(theme)}
+                  </span>
+                </span>
+              )}
+
+              {/* 選択中のハイライトオーバーレイ */}
+              {isSelected && (
+                <div
+                  className="pointer-events-none absolute inset-0 animate-slot-selected"
+                  style={{
+                    boxShadow: `inset 0 0 0 3px ${color}`,
+                    backgroundColor: hexToRgba(color, 0.12),
+                  }}
+                />
+              )}
+
               {/* デバッグ用：画像の状態をオーバーレイ表示（開発時のみ） */}
               {process.env.NODE_ENV === "development" && (
                 <div className="absolute top-0 left-0 bg-black/50 text-[8px] text-white p-1">
                   {polygon.id}: {image ? "SET" : "EMPTY"}
                 </div>
               )}
-              {!image ? (
-                <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-700 bg-white/85 px-2 py-1 text-base leading-none text-zinc-700">
-                  📷
-                </span>
-              ) : null}
             </div>
           );
         })}
 
+        {/* 枠線SVG */}
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full"
           viewBox="0 0 100 100"
@@ -87,72 +127,24 @@ export function CollageFrame({ template, images, themeMap, onFileChange, onLog }
         >
           {template.polygons.map((polygon) => {
             const color = slotColorMap[polygon.id]!;
+            const isSelected = selectedSlotId === polygon.id;
             const points = toSvgPolygonPoints(polygon.clipPath);
             return (
               <polygon
                 key={`line-${polygon.id}`}
                 points={points}
                 fill="none"
-                stroke={color}
-                strokeWidth="1"
+                stroke={isSelected ? color : color}
+                strokeWidth={isSelected ? "2.5" : "1"}
                 vectorEffect="non-scaling-stroke"
+                style={{
+                  transition: "stroke-width 0.2s ease",
+                  filter: isSelected ? `drop-shadow(0 0 3px ${color})` : "none",
+                }}
               />
             );
           })}
         </svg>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3">
-        {template.polygons.map((polygon, index) => {
-          const color = slotColorMap[polygon.id]!;
-          return (
-            <div
-              key={`row-${polygon.id}`}
-              className="flex flex-col gap-1 p-3 rounded-xl border-2 bg-white shadow-sm"
-              style={{ borderColor: color }}
-            >
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-zinc-900">枠 {index + 1}: {themeMap[polygon.id]}</span>
-                {images[polygon.id] ? (
-                  <span className="text-emerald-600 font-bold text-xs">✓ 撮影済み</span>
-                ) : (
-                  <span className="text-rose-500 font-bold text-xs">未撮影</span>
-                )}
-              </div>
-
-              {images[polygon.id] ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={images[polygon.id]}
-                  alt={`slot-${polygon.id}`}
-                  className="h-12 w-12 rounded object-cover border border-zinc-300 mb-1"
-                  onLoad={() => onLog(`IMG rendered: ${polygon.id}`)}
-                  onError={() => onLog(`IMG render error: ${polygon.id}`)}
-                />
-              ) : null}
-
-              {/* カメラ起動ボタンのみ残す */}
-              <div className="flex flex-col gap-2 w-full mt-2">
-                <div className="relative w-full h-12 bg-zinc-900 text-white rounded-lg font-bold text-xs shadow-md active:bg-zinc-800 active:scale-95 transition-all">
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span>📸 カメラを起動して撮影</span>
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => {
-                      onLog(`CAMERA INPUT CHANGED: ${polygon.id}`);
-                      onFileChange(e, polygon.id);
-                    }}
-                    onClick={() => onLog(`CAMERA CLICKED: ${polygon.id}`)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
