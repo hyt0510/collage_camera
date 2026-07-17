@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
+import { CollageBackground } from "@/components/features/collage/CollageBackground";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -23,10 +24,13 @@ export default function Home() {
   const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
   const hasImageInSelected = selectedSlotId ? !!images[selectedSlotId] : false;
 
-  // 選択中スロットの色（SLOT_COLORSと同じ配列）
-  const SLOT_COLORS = ["#ef4444", "#f59e0b", "#84cc16", "#06b6d4", "#3b82f6", "#a855f7"];
+  // 選択中スロットの色（テープの色）
+  const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
   const selectedSlotIndex = template?.polygons.findIndex(p => p.id === selectedSlotId) ?? -1;
-  const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#6366f1";
+  const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#CA0000";
+
+  const getContrastColor = (hex: string) => 
+    (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
   // 認証中のローディング表示
   if (authLoading) {
@@ -67,13 +71,14 @@ export default function Home() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
+    <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28 overflow-hidden">
+      <CollageBackground />
       <header 
         className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
         style={{ transform: "rotate(-1deg)" }}
       >
-        <div className="absolute -top-2 left-4 w-12 h-4 bg-white/60 rotate-2 masking-tape opacity-80" />
-        <div className="absolute -top-2 right-4 w-12 h-4 bg-white/60 -rotate-2 masking-tape opacity-80" />
+        <div className="absolute -top-2 left-4 w-12 h-4 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#CA0000" }} />
+        <div className="absolute -top-2 right-4 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#010193" }} />
         
         <div className="flex justify-between items-start pt-1">
           <div>
@@ -131,7 +136,10 @@ export default function Home() {
             }}
           >
             {/* テープ装飾 */}
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-16 h-5 bg-white/60 rotate-2 masking-tape opacity-80" />
+            <div 
+              className="absolute -top-2 left-1/2 -translate-x-1/2 w-16 h-5 rotate-2 masking-tape opacity-90" 
+              style={{ backgroundColor: selectedSlotColor }} 
+            />
             
             {selectedTheme ? (
               <div key={selectedSlotId} className="animate-theme-fade text-center mt-1">
@@ -293,8 +301,12 @@ export default function Home() {
           <div className="mx-auto max-w-md px-4 pt-3 flex justify-center">
             <button
               onClick={() => setIsCameraOpen(true)}
-              className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 text-white border-2 border-black"
-              style={{ backgroundColor: selectedSlotColor, transform: "rotate(1deg)" }}
+              className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-black"
+              style={{ 
+                backgroundColor: selectedSlotColor, 
+                color: getContrastColor(selectedSlotColor),
+                transform: "rotate(1deg)" 
+              }}
             >
               <span className="text-xl">📸</span>
               <span className="tracking-widest">{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
