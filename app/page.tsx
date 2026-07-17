@@ -68,40 +68,52 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
-      <header className="rounded-2xl bg-white/90 p-4 shadow-sm border border-zinc-200">
-        <div className="flex justify-between items-start">
+      <header 
+        className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
+        style={{ transform: "rotate(-1deg)" }}
+      >
+        <div className="absolute -top-2 left-4 w-12 h-4 bg-white/60 rotate-2 masking-tape opacity-80" />
+        <div className="absolute -top-2 right-4 w-12 h-4 bg-white/60 -rotate-2 masking-tape opacity-80" />
+        
+        <div className="flex justify-between items-start pt-1">
           <div>
-            <h1 className="text-xl font-bold text-zinc-900">collage</h1>
-            <p className="mt-1 text-sm text-zinc-600">
+            <h1 className="text-2xl font-bold text-zinc-900 tracking-wider">collage</h1>
+            <p className="mt-1 text-sm text-zinc-600 font-bold">
               写真を撮影して、モニターに投稿しよう！
             </p>
           </div>
           {submissionCount > 0 && (
-            <div className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+            <div className="bg-zinc-800 text-white px-3 py-1 rounded-sm text-xs font-bold shadow-sm" style={{ transform: "rotate(2deg)" }}>
               {submissionCount}回目
             </div>
           )}
         </div>
         
-        {/* タブ切り替え */}
-        <div className="mt-4 flex p-1 bg-zinc-100 rounded-xl">
+        {/* タブ切り替え（手書きノート風） */}
+        <div className="mt-4 flex gap-2">
           <button
             onClick={() => setActiveTab("create")}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-              activeTab === "create" ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500"
+            className={`flex-1 py-2 text-sm font-bold border-2 transition-all ${
+              activeTab === "create" 
+                ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5" 
+                : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
             }`}
+            style={{ borderRadius: "2px 8px 2px 2px" }}
           >
             作成
           </button>
           <button
             onClick={() => setActiveTab("history")}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all relative ${
-              activeTab === "history" ? "bg-white text-indigo-600 shadow-sm" : "text-zinc-500"
+            className={`flex-1 py-2 text-sm font-bold border-2 transition-all relative ${
+              activeTab === "history" 
+                ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5" 
+                : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
             }`}
+            style={{ borderRadius: "8px 2px 2px 2px" }}
           >
             履歴
             {collageHistory.length > 0 && (
-              <span className="absolute top-1 right-2 w-2 h-2 bg-rose-500 rounded-full"></span>
+              <span className="absolute top-1 right-2 w-2 h-2 bg-rose-500 rounded-full border border-rose-700"></span>
             )}
           </button>
         </div>
@@ -109,24 +121,30 @@ export default function Home() {
 
       {/* 選択中テーマの固定表示バー */}
       {activeTab === "create" && !result && (
-        <div className="sticky top-0 z-10">
+        <div className="sticky top-0 z-10 pt-2 pb-2">
           <div
-            className="rounded-xl px-4 py-3 shadow-sm border transition-all duration-200"
+            className="rounded-sm px-5 py-4 shadow-md border transition-all duration-200 relative overflow-hidden"
             style={{
-              backgroundColor: selectedTheme ? `${selectedSlotColor}10` : "#f4f4f5",
-              borderColor: selectedTheme ? `${selectedSlotColor}40` : "#e4e4e7",
+              backgroundColor: selectedTheme ? `${selectedSlotColor}15` : "#fefce8",
+              borderColor: selectedTheme ? `${selectedSlotColor}40` : "#fef08a",
+              transform: "rotate(-1deg)",
             }}
           >
+            {/* テープ装飾 */}
+            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-16 h-5 bg-white/60 rotate-2 masking-tape opacity-80" />
+            
             {selectedTheme ? (
-              <div key={selectedSlotId} className="animate-theme-fade">
-                <p className="text-xs font-bold text-zinc-400 mb-0.5">📷 テーマ</p>
-                <p className="text-sm font-bold text-zinc-900 leading-snug">{selectedTheme}</p>
+              <div key={selectedSlotId} className="animate-theme-fade text-center mt-1">
+                <p className="text-xs font-bold text-zinc-500 mb-1 tracking-wider">テーマ</p>
+                <p className="text-lg font-bold text-zinc-800 leading-snug">{selectedTheme}</p>
                 {hasImageInSelected && (
-                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ 撮影済み — タップで撮り直せます</p>
+                  <p className="text-[11px] text-emerald-600 font-bold mt-2">✓ 撮影済み — タップで撮り直せます</p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-zinc-400 text-center">枠をタップしてテーマを確認 👆</p>
+              <div className="text-center mt-1">
+                <p className="text-sm font-bold text-zinc-600">枠をタップしてテーマを確認 👆</p>
+              </div>
             )}
           </div>
         </div>
@@ -184,21 +202,22 @@ export default function Home() {
 
               {/* 進捗インジケーター */}
               {template && (
-                <div className="flex items-center justify-center gap-2 py-1">
+                <div className="flex items-center justify-center gap-2 py-2 mt-2">
                   {template.polygons.map((p, i) => (
                     <div
                       key={p.id}
-                      className={`w-2.5 h-2.5 rounded-full transition-all duration-200 ${
-                        images[p.id] ? "scale-100" : "scale-75 opacity-50"
+                      className={`w-3 h-3 rounded-full transition-all duration-200 border-2 ${
+                        images[p.id] ? "scale-100 border-transparent" : "scale-75 border-zinc-300 bg-transparent"
                       }`}
                       style={{
                         backgroundColor: images[p.id]
                           ? SLOT_COLORS[i % SLOT_COLORS.length]
-                          : "#d4d4d8",
+                          : "transparent",
+                        transform: images[p.id] ? `rotate(${Math.random() * 20 - 10}deg)` : "none",
                       }}
                     />
                   ))}
-                  <span className="ml-2 text-xs text-zinc-400 font-bold">
+                  <span className="ml-3 text-sm text-zinc-500 font-bold tracking-widest border-b-2 border-zinc-300 pb-0.5">
                     {template.polygons.filter(p => images[p.id]).length}/{template.polygons.length}
                   </span>
                 </div>
@@ -206,12 +225,13 @@ export default function Home() {
 
               {/* 投稿ボタン（全枠撮影済みの場合のみ表示） */}
               {allFilled && (
-                <section className="rounded-2xl bg-white p-4 shadow-sm border border-zinc-100">
+                <section className="mt-2">
                   <button
                     type="button"
                     onClick={submit}
                     disabled={submitting}
-                    className="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform disabled:bg-zinc-300 disabled:shadow-none disabled:cursor-not-allowed"
+                    className="w-full py-4 rounded-sm bg-zinc-800 text-white font-bold shadow-[4px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-1 active:shadow-none transition-all disabled:bg-zinc-400 disabled:shadow-none disabled:cursor-not-allowed border-2 border-zinc-900"
+                    style={{ transform: "rotate(-1deg)" }}
                   >
                     {submitting ? (
                       <span className="flex items-center justify-center gap-2">
@@ -269,15 +289,15 @@ export default function Home() {
 
       {/* 下部固定カメラボタン — 枠選択中かつ作成タブかつ未投稿時のみ表示 */}
       {activeTab === "create" && !result && selectedSlotId && template && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up">
-          <div className="mx-auto max-w-md px-4 pb-5 pt-3 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent">
+        <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up pb-5">
+          <div className="mx-auto max-w-md px-4 pt-3 flex justify-center">
             <button
               onClick={() => setIsCameraOpen(true)}
-              className="w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
-              style={{ backgroundColor: selectedSlotColor }}
+              className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 text-white border-2 border-black"
+              style={{ backgroundColor: selectedSlotColor, transform: "rotate(1deg)" }}
             >
-              <span>📸</span>
-              <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
+              <span className="text-xl">📸</span>
+              <span className="tracking-widest">{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
             </button>
           </div>
         </div>
