@@ -57,7 +57,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
             >
               {image && (
                 <div 
-                  className="absolute"
+                  className="absolute animate-paste-in"
                   style={{
                     left: `${box.left}%`,
                     top: `${box.top}%`,
@@ -83,13 +83,15 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                   style={{
                     left: `${center.x}%`,
                     top: `${center.y}%`,
-                    transform: "translate(-50%, -50%)",
+                    transform: `translate(-50%, -50%) rotate(${Math.random() * 6 - 3}deg)`,
                   }}
                 >
-                  <span className="text-base leading-none">📷</span>
                   <span
-                    className="rounded-full border bg-white/90 px-2 py-0.5 text-[10px] font-bold leading-tight text-zinc-700 shadow-sm whitespace-nowrap"
-                    style={{ borderColor: color }}
+                    className="masking-tape text-[10px] font-bold text-zinc-700 whitespace-nowrap"
+                    style={{ 
+                      borderColor: color, 
+                      color: color 
+                    }}
                   >
                     {shortenTheme(theme)}
                   </span>
@@ -133,11 +135,14 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                 key={`line-${polygon.id}`}
                 points={points}
                 fill="none"
-                stroke={isSelected ? color : color}
-                strokeWidth={isSelected ? "2.5" : "1"}
+                stroke={isSelected ? color : "#d1d5db"}
+                strokeWidth={isSelected ? "3" : "1.5"}
+                strokeDasharray="4 2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
                 style={{
-                  transition: "stroke-width 0.2s ease",
+                  transition: "stroke-width 0.2s ease, stroke 0.2s ease",
                   filter: isSelected ? `drop-shadow(0 0 3px ${color})` : "none",
                 }}
               />
