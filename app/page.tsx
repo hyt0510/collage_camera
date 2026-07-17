@@ -71,7 +71,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28 overflow-hidden">
+    <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
       <CollageBackground />
       <header 
         className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
@@ -126,12 +126,14 @@ export default function Home() {
 
       {/* 選択中テーマの固定表示バー */}
       {activeTab === "create" && !result && (
-        <div className="sticky top-0 z-10 pt-2 pb-2">
+        <div className="sticky top-3 z-40 pt-1 pb-2">
           <div
-            className="rounded-sm px-5 py-4 shadow-md border transition-all duration-200 relative overflow-hidden"
+            className="rounded-sm px-5 py-4 shadow-[0_6px_16px_rgba(0,0,0,0.15)] transition-all duration-200 relative overflow-hidden backdrop-blur-md"
             style={{
-              backgroundColor: selectedTheme ? `${selectedSlotColor}15` : "#fefce8",
-              borderColor: selectedTheme ? `${selectedSlotColor}40` : "#fef08a",
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              borderColor: selectedTheme ? selectedSlotColor : "#fef08a",
+              borderWidth: selectedTheme ? "2px" : "1px",
+              borderStyle: "solid",
               transform: "rotate(-1deg)",
             }}
           >
