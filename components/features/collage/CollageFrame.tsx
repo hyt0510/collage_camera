@@ -17,11 +17,10 @@ interface Props {
   themeMap: Record<string, string>;
   selectedSlotId: string | null;
   onSlotSelect: (slotId: string) => void;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>, id: string) => void;
   onLog: (msg: string) => void;
 }
 
-export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onFileChange, onLog }: Props) {
+export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;

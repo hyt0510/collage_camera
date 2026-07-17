@@ -8,6 +8,7 @@ import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
+import { CameraScreen } from "@/components/features/camera/CameraScreen";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -15,12 +16,12 @@ export default function Home() {
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
-    handleFileChange, submit, reset, pushLog
+    setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   // 選択中のテーマ情報
   const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
@@ -30,34 +31,6 @@ export default function Home() {
   const SLOT_COLORS = ["#ef4444", "#f59e0b", "#84cc16", "#06b6d4", "#3b82f6", "#a855f7"];
   const selectedSlotIndex = template?.polygons.findIndex(p => p.id === selectedSlotId) ?? -1;
   const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#6366f1";
-
-  // 認証中のローディング表示
-  if (authLoading) {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
-        <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-        <p className="text-sm text-zinc-500">準備中...</p>
-      </main>
-    );
-  }
-
-  // 認証エラー表示
-  if (authError) {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
-        <div className="rounded-2xl bg-rose-50 p-6 border border-rose-200 text-center">
-          <p className="text-rose-700 font-bold">認証エラー</p>
-          <p className="mt-2 text-sm text-rose-600">{authError}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-6 py-2 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-colors"
-          >
-            再読み込み
-          </button>
-        </div>
-      </main>
-    );
-  }
 
   // 認証中のローディング表示
   if (authLoading) {
@@ -208,7 +181,6 @@ export default function Home() {
                     themeMap={themeMap}
                     selectedSlotId={selectedSlotId}
                     onSlotSelect={setSelectedSlotId}
-                    onFileChange={handleFileChange}
                     onLog={pushLog}
                   />
                 </section>
@@ -303,31 +275,31 @@ export default function Home() {
       {activeTab === "create" && !result && selectedSlotId && template && (
         <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up">
           <div className="mx-auto max-w-md px-4 pb-5 pt-3 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent">
-            <div
-              className="relative w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
+            <button
+              onClick={() => setIsCameraOpen(true)}
+              className="w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
               style={{ backgroundColor: selectedSlotColor }}
             >
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none gap-2">
-                <span>📸</span>
-                <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
-              </div>
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => {
-                  if (selectedSlotId) {
-                    pushLog(`CAMERA INPUT CHANGED: ${selectedSlotId}`);
-                    handleFileChange(e, selectedSlotId);
-                  }
-                }}
-                onClick={() => pushLog(`CAMERA CLICKED: ${selectedSlotId}`)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-            </div>
+              <span>📸</span>
+              <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
+            </button>
           </div>
         </div>
+      )}
+
+      {/* アプリ内カメラオーバーレイ */}
+      {isCameraOpen && selectedSlotId && selectedTheme && template && (
+        <CameraScreen
+          theme={selectedTheme}
+          capturedCount={template.polygons.filter(p => images[p.id]).length}
+          totalCount={template.polygons.length}
+          slotColor={selectedSlotColor}
+          onCapture={(dataUrl) => {
+            setImageDataUrl(selectedSlotId, dataUrl);
+            setIsCameraOpen(false);
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
       )}
     </main>
   );
