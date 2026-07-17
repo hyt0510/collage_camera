@@ -1,10 +1,6 @@
 "use client";
 
-<<<<<<< HEAD
-import { useState } from "react";
-=======
 import { useState, useRef } from "react";
->>>>>>> 2d8caa00839c4f45538bd9d5a2dc915e25d61de5
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
