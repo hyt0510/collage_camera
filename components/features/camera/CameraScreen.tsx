@@ -255,12 +255,18 @@ export function CameraScreen({
               </button>
 
               {/* テーマカード */}
-              <div className="flex-1 rounded-2xl px-4 py-3 bg-black/40 backdrop-blur-sm border border-white/10">
-                <p className="text-[10px] font-bold text-white/50 tracking-wider uppercase">📷 テーマ</p>
-                <p className="text-base font-bold text-white mt-0.5 leading-snug">{theme}</p>
-                <p className="text-[11px] text-white/40 mt-1.5 font-medium">
-                  {capturedCount} / {totalCount} 枚撮影済み
-                </p>
+              <div className="flex-1 mt-1">
+                <div 
+                  className="rounded-sm px-4 py-3 shadow-md relative"
+                  style={{ backgroundColor: "#fefce8", transform: "rotate(1deg)" }}
+                >
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-4 bg-white/50 -rotate-2 masking-tape" />
+                  <p className="text-[10px] font-bold text-zinc-500 tracking-wider">テーマ</p>
+                  <p className="text-base font-bold text-zinc-900 mt-0.5 leading-snug">{theme}</p>
+                  <p className="text-[11px] text-zinc-500 mt-1.5 font-bold border-b border-zinc-200 inline-block pb-0.5">
+                    {capturedCount} / {totalCount} 枚撮影済み
+                  </p>
+                </div>
               </div>
             </div>
           </div>
