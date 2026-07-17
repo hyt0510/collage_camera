@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
+import { CameraScreen } from "@/components/features/camera/CameraScreen";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -11,12 +12,12 @@ export default function Home() {
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
-    handleFileChange, submit, reset, pushLog
+    setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   // 選択中のテーマ情報
   const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
@@ -176,7 +177,6 @@ export default function Home() {
                     themeMap={themeMap}
                     selectedSlotId={selectedSlotId}
                     onSlotSelect={setSelectedSlotId}
-                    onFileChange={handleFileChange}
                     onLog={pushLog}
                   />
                 </section>
@@ -271,31 +271,31 @@ export default function Home() {
       {activeTab === "create" && !result && selectedSlotId && template && (
         <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up">
           <div className="mx-auto max-w-md px-4 pb-5 pt-3 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent">
-            <div
-              className="relative w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
+            <button
+              onClick={() => setIsCameraOpen(true)}
+              className="w-full h-14 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.97] transition-all flex items-center justify-center gap-2 text-white"
               style={{ backgroundColor: selectedSlotColor }}
             >
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none gap-2">
-                <span>📸</span>
-                <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
-              </div>
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => {
-                  if (selectedSlotId) {
-                    pushLog(`CAMERA INPUT CHANGED: ${selectedSlotId}`);
-                    handleFileChange(e, selectedSlotId);
-                  }
-                }}
-                onClick={() => pushLog(`CAMERA CLICKED: ${selectedSlotId}`)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-            </div>
+              <span>📸</span>
+              <span>{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
+            </button>
           </div>
         </div>
+      )}
+
+      {/* アプリ内カメラオーバーレイ */}
+      {isCameraOpen && selectedSlotId && selectedTheme && template && (
+        <CameraScreen
+          theme={selectedTheme}
+          capturedCount={template.polygons.filter(p => images[p.id]).length}
+          totalCount={template.polygons.length}
+          slotColor={selectedSlotColor}
+          onCapture={(dataUrl) => {
+            setImageDataUrl(selectedSlotId, dataUrl);
+            setIsCameraOpen(false);
+          }}
+          onClose={() => setIsCameraOpen(false)}
+        />
       )}
     </main>
   );
