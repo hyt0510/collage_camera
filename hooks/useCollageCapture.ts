@@ -3,6 +3,7 @@ import { User } from "firebase/auth";
 import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
 import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
+import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
 
 const IMAGES_KEY = "collage_v10_img";
 const PRESET_KEY = "collage_v10_preset";
@@ -90,15 +91,26 @@ export function useCollageCapture(user: User | null) {
       const savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
       if (savedCount) setSubmissionCount(parseInt(savedCount, 10));
 
-      const savedHistory = localStorage.getItem(HISTORY_KEY);
-      if (savedHistory) {
-        try {
-          const parsed = JSON.parse(savedHistory);
-          if (Array.isArray(parsed)) setCollageHistory(parsed.slice(0, 5));
-        } catch (e) {
-          pushLog("History restoration failed");
+      loadHistoryFromDB().then(parsed => {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCollageHistory(parsed.slice(0, 5));
+        } else {
+          // 移行用: IndexedDBになければlocalStorageから読み込む
+          const savedHistory = localStorage.getItem(HISTORY_KEY);
+          if (savedHistory) {
+            try {
+              const oldParsed = JSON.parse(savedHistory);
+              if (Array.isArray(oldParsed)) {
+                setCollageHistory(oldParsed.slice(0, 5));
+                // IndexedDBへ移行保存
+                void saveHistoryToDB(oldParsed.slice(0, 5));
+              }
+            } catch (e) {
+              pushLog("History restoration failed");
+            }
+          }
         }
-      }
+      });
 
       const savedImages = localStorage.getItem(IMAGES_KEY);
       const savedPreset = localStorage.getItem(PRESET_KEY);
@@ -182,11 +194,11 @@ export function useCollageCapture(user: User | null) {
       const newHistory = [historyItem, ...collageHistory].slice(0, 5);
       setCollageHistory(newHistory);
       
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
-      } catch (e) {
-        pushLog("History save failed (quota?)");
-      }
+      // Base64画像は大きいため、localStorageの5MB制限を回避するためにIndexedDBに保存する
+      void saveHistoryToDB(newHistory).then(() => {
+        // 保存できたら古いlocalStorageからは削除して容量を空ける
+        localStorage.removeItem(HISTORY_KEY);
+      });
 
       localStorage.removeItem(IMAGES_KEY);
       pushLog("Submission complete.");
