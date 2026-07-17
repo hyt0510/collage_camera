@@ -122,6 +122,12 @@ export function useCollageCapture(user: User | null) {
     }
   }, [pushLog, syncPreset]);
 
+  // データURLを直接セットする（アプリ内カメラ用）
+  const setImageDataUrl = useCallback((polygonId: string, dataUrl: string) => {
+    setImages(prev => ({ ...prev, [polygonId]: dataUrl }));
+    pushLog(`Direct image set: ${polygonId}`);
+  }, [pushLog]);
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>, polygonId: string) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -197,6 +203,6 @@ export function useCollageCapture(user: User | null) {
     template, themeMap, images, errorMessage, 
     submitting, result, collageDataUrl, submissionCount, 
     collageHistory,
-    handleFileChange, submit, reset, pushLog 
+    handleFileChange, setImageDataUrl, submit, reset, pushLog 
   };
 }
