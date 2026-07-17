@@ -11,7 +11,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
 const notoSansMyanmar = Noto_Sans_Myanmar({
   weight: "700",
   variable: "--font-noto-myanmar",
@@ -36,6 +35,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${notoSansMyanmar.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-myanmar">{children}</body>
+
     </html>
   );
 }
