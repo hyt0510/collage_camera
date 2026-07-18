@@ -80,18 +80,34 @@ export function useCollageCapture(user: User | null) {
 
   const syncPreset = useCallback(async () => {
     // 撮影進行中(すでに写真が1枚以上撮影されている場合)は、プリセットが切り替わらないように同期をスキップ
-    if (Object.keys(images).length > 0) {
+    let hasImages = Object.keys(images).length > 0;
+    if (!hasImages && typeof window !== "undefined") {
+      const savedImages = localStorage.getItem(IMAGES_KEY);
+      if (savedImages) {
+        try {
+          const parsed = JSON.parse(savedImages);
+          if (Object.keys(parsed).length > 0) {
+            hasImages = true;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (hasImages) {
       return;
     }
     try {
       const preset = await fetchAssignedPreset();
       if (preset) {
-        if (presetId && preset.id !== presetId) {
+        const themeMapChanged = JSON.stringify(preset.themeMap) !== JSON.stringify(themeMap);
+        if ((presetId && preset.id !== presetId) || (presetId && themeMapChanged)) {
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
           setThemeMap(preset.themeMap);
           localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
-          pushLog(`New preset detected: ${preset.id}.`);
+          pushLog(`New preset or theme detected: ${preset.id}.`);
         } else if (!presetId) {
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
@@ -101,13 +117,27 @@ export function useCollageCapture(user: User | null) {
         }
       }
     } catch (e) { pushLog(`Sync error in poll: ${String(e)}`); }
-  }, [presetId, images, pushLog]);
+  }, [presetId, themeMap, images, pushLog]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       void syncPreset();
     }, 10000);
-    return () => clearInterval(timer);
+
+    const handleFocus = () => {
+      void syncPreset();
+    };
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        void syncPreset();
+      }
+    });
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [syncPreset]);
 
   useEffect(() => {
@@ -259,7 +289,7 @@ export function useCollageCapture(user: User | null) {
   return { 
     template, themeMap, images, errorMessage, 
     submitting, result, collageDataUrl, submissionCount, 
-    collageHistory, unlockedQRs, setUnlockedQRs,
+    collageHistory, unlockedQRs, setUnlockedQRs, presetId,
     handleFileChange, setImageDataUrl, submit, reset, pushLog 
   };
 }

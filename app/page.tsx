@@ -6,7 +6,7 @@ import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
-import { getSlotLockId } from "@/lib/collage-config";
+import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId } from "@/lib/collage-config";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -14,7 +14,7 @@ export default function Home() {
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
-    unlockedQRs, setUnlockedQRs,
+    unlockedQRs, setUnlockedQRs, presetId,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
@@ -33,16 +33,18 @@ export default function Home() {
 
   // ロック判定
   const totalSlots = template?.polygons.length ?? 0;
-  const lockId = template && selectedSlotIndex >= 0 ? getSlotLockId(selectedSlotIndex, totalSlots) : null;
+  const lockId = template && presetId && selectedSlotIndex >= 0 ? getSlotLockId(presetId, selectedSlotIndex) : null;
   const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // URLの ?unlock=... パラメータを監視
+  // URLの ?unlock=... パラメータと ?lock=... パラメータを監視
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const unlockVal = params.get("unlock");
+      const lockVal = params.get("lock");
+
       if (unlockVal) {
         if (!unlockedQRs.includes(unlockVal)) {
           setUnlockedQRs(prev => {
@@ -53,18 +55,36 @@ export default function Home() {
             return next;
           });
           
-          // ポップアップ/トーストを表示
           let friendlyName = `QRコード ${unlockVal}`;
           if (unlockVal.includes("_")) {
             const parts = unlockVal.split("_");
             friendlyName = `${parts[0]}枚コラージュの「QRコード ${parts[1] === "1" ? "A" : "B"}」`;
           }
-          setToastMessage(`🔑 ${friendlyName} を読み取り、枠を開放しました！`);
+          
+          const customUnlockMsg = getUnlockMessageByLockId(unlockVal);
+          if (customUnlockMsg) {
+            setToastMessage(`🔑 ${customUnlockMsg}`);
+          } else {
+            setToastMessage(`🔑 ${friendlyName} を読み取り、枠を開放しました！`);
+          }
           setTimeout(() => setToastMessage(null), 4000);
         }
         
-        // クエリパラメータをURLから削除してスッキリさせる
         params.delete("unlock");
+        const newSearch = params.toString();
+        const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
+        window.history.replaceState({}, "", newPath);
+      } else if (lockVal) {
+        if (lockVal === "all") {
+          setUnlockedQRs([]);
+          setToastMessage("すべてのロックをリセットしました（デバッグ）");
+        } else {
+          setUnlockedQRs(prev => prev.filter(id => id !== lockVal));
+          setToastMessage(`ロック「${lockVal}」をリセットしました（デバッグ）`);
+        }
+        setTimeout(() => setToastMessage(null), 4000);
+        
+        params.delete("lock");
         const newSearch = params.toString();
         const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
         window.history.replaceState({}, "", newPath);
@@ -257,6 +277,7 @@ export default function Home() {
                     onSlotSelect={setSelectedSlotId}
                     onLog={pushLog}
                     unlockedQRs={unlockedQRs}
+                    presetId={presetId}
                   />
                 </section>
               )}
@@ -361,9 +382,9 @@ export default function Home() {
                   <span>🔒</span> ロック中
                 </span>
                 <span className="text-[11px] text-zinc-500 font-bold leading-normal">
-                  {totalSlots === 6 
-                    ? `この枠を撮影するには、会場内にある「QRコード ${lockId === "6_1" ? "A" : "B"}」を探してスキャンしてください！`
-                    : `この枠を撮影するには、会場内にある「QRコード」を探してスキャンしてください！`}
+                  {presetId && selectedSlotIndex >= 0 && getSlotLockMessage(presetId, selectedSlotIndex) 
+                    ? getSlotLockMessage(presetId, selectedSlotIndex) 
+                    : "この枠を撮影するには、QRコードをスキャンしてください！"}
                 </span>
               </div>
             ) : (

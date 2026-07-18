@@ -21,9 +21,10 @@ interface Props {
   onSlotSelect: (slotId: string) => void;
   onLog: (msg: string) => void;
   unlockedQRs?: string[];
+  presetId?: string | null;
 }
 
-export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [] }: Props) {
+export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [], presetId }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;
@@ -41,7 +42,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
           const theme = themeMap[polygon.id] ?? "";
 
           // ロック状態の判定
-          const lockId = getSlotLockId(index, template.polygons.length);
+          const lockId = presetId ? getSlotLockId(presetId, index) : null;
           const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
 
           return (
