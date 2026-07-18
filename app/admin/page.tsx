@@ -197,13 +197,13 @@ export default function AdminPage() {
       </section>
 
       <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {submissions.map((submission) => {
-          const previewUrl = submission.collageDataUrl || submission.items[0]?.dataUrl;
-          const previewTheme = submission.items[0]?.theme;
-          const moderation = submission.items[0]?.moderation;
+        {submissions.map((submission, index) => {
+          const previewUrl = submission.collageDataUrl || submission.items?.[0]?.dataUrl;
+          const previewTheme = submission.items?.[0]?.theme;
+          const moderation = submission.items?.[0]?.moderation;
           return (
             <article
-              key={submission.id}
+              key={submission.id || `sub-${index}`}
               className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
             >
               <div className="aspect-[9/16] w-full bg-zinc-200">

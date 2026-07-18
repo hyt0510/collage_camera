@@ -1,6 +1,5 @@
 
-import React from "react";
-import { FrameTemplate } from "@/lib/collage-config";
+import { FrameTemplate, getSlotLockId } from "@/lib/collage-config";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
@@ -21,9 +20,10 @@ interface Props {
   selectedSlotId: string | null;
   onSlotSelect: (slotId: string) => void;
   onLog: (msg: string) => void;
+  unlockedQRs?: string[];
 }
 
-export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog }: Props) {
+export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [] }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;
@@ -32,13 +32,17 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
   return (
     <div className="mx-auto w-full rounded-[24px] bg-zinc-300 p-2 shadow-inner">
       <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
-        {template.polygons.map((polygon) => {
+        {template.polygons.map((polygon, index) => {
           const image = images[polygon.id];
           const color = slotColorMap[polygon.id]!;
           const box = getPolygonBoundingBox(polygon.clipPath);
           const center = getPolygonCenter(polygon.clipPath);
           const isSelected = selectedSlotId === polygon.id;
           const theme = themeMap[polygon.id] ?? "";
+
+          // ロック状態の判定
+          const lockId = getSlotLockId(index, template.polygons.length);
+          const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
 
           return (
             <div
@@ -47,10 +51,12 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
               style={{
                 clipPath: polygon.clipPath,
                 WebkitClipPath: polygon.clipPath,
-                backgroundColor: image ? "transparent" : "#d1d5db",
+                backgroundColor: isLocked ? "#a1a1aa" : (image ? "transparent" : "#d1d5db"),
                 backgroundImage: image
                   ? "none"
-                  : `linear-gradient(145deg, ${hexToRgba(color, 0.25)}, #e7e5e4)`,
+                  : isLocked
+                    ? `repeating-linear-gradient(45deg, #94a3b8 0, #94a3b8 8px, #cbd5e1 8px, #cbd5e1 16px)`
+                    : `linear-gradient(145deg, ${hexToRgba(color, 0.25)}, #e7e5e4)`,
                 backgroundPosition: "center",
                 backgroundSize: "cover",
                 backgroundRepeat: "no-repeat",
@@ -79,7 +85,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                 </div>
               )}
 
-              {/* 未撮影時のテーマ短縮ラベル */}
+              {/* 未撮影時のテーマ短縮ラベル / ロック表示 */}
               {!image && (
                 <span
                   className="pointer-events-none absolute flex flex-col items-center gap-1"
@@ -89,15 +95,24 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                     transform: `translate(-50%, -50%) rotate(${Math.random() * 6 - 3}deg)`,
                   }}
                 >
-                  <span
-                    className="masking-tape text-[10px] font-bold whitespace-nowrap opacity-90"
-                    style={{ 
-                      backgroundColor: color, 
-                      color: getContrastColor(color) 
-                    }}
-                  >
-                    {shortenTheme(theme)}
-                  </span>
+                  {isLocked ? (
+                    <span
+                      className="bg-zinc-800 text-white rounded-full p-2 flex items-center justify-center shadow-md border-2 border-zinc-600 w-9 h-9"
+                      style={{ fontSize: "14px" }}
+                    >
+                      🔒
+                    </span>
+                  ) : (
+                    <span
+                      className="masking-tape text-[10px] font-bold whitespace-nowrap opacity-90"
+                      style={{ 
+                        backgroundColor: color, 
+                        color: getContrastColor(color) 
+                      }}
+                    >
+                      {shortenTheme(theme)}
+                    </span>
+                  )}
                 </span>
               )}
 
@@ -115,7 +130,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
               {/* デバッグ用：画像の状態をオーバーレイ表示（開発時のみ） */}
               {process.env.NODE_ENV === "development" && (
                 <div className="absolute top-0 left-0 bg-black/50 text-[8px] text-white p-1">
-                  {polygon.id}: {image ? "SET" : "EMPTY"}
+                  {polygon.id}: {image ? "SET" : "EMPTY"}{isLocked ? " (LOCKED)" : ""}
                 </div>
               )}
             </div>
