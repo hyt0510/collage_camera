@@ -9,6 +9,7 @@ const IMAGES_KEY = "collage_v10_img";
 const PRESET_KEY = "collage_v10_preset";
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
 const HISTORY_KEY = "collage_v10_history";
+const UNLOCKED_QRS_KEY = "collage_v10_unlocked_qrs";
 
 export interface CollageHistoryItem {
   id: string;
@@ -34,6 +35,7 @@ export function useCollageCapture(user: User | null) {
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
+  const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
 
   const pushLog = useCallback((_msg: string) => {}, []);
 
@@ -43,6 +45,17 @@ export function useCollageCapture(user: User | null) {
     setImages({});
     localStorage.removeItem(IMAGES_KEY);
     pushLog("UI Reset for new submission");
+
+    // リセット時に即座に最新プリセットと同期する
+    fetchAssignedPreset().then(preset => {
+      if (preset) {
+        setPresetId(preset.id);
+        setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
+        setThemeMap(preset.themeMap);
+        localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
+        pushLog(`Preset synced after reset: ${preset.id}`);
+      }
+    }).catch(e => pushLog(`Sync error after reset: ${String(e)}`));
   }, [pushLog]);
 
   // localStorage同期
@@ -56,7 +69,20 @@ export function useCollageCapture(user: User | null) {
     }
   }, [images, pushLog]);
 
+  // unlockedQRs の localStorage 同期
+  useEffect(() => {
+    try {
+      localStorage.setItem(UNLOCKED_QRS_KEY, JSON.stringify(unlockedQRs));
+    } catch (e) {
+      pushLog("localStorage sync for unlocked QRs failed");
+    }
+  }, [unlockedQRs, pushLog]);
+
   const syncPreset = useCallback(async () => {
+    // 撮影進行中(すでに写真が1枚以上撮影されている場合)は、プリセットが切り替わらないように同期をスキップ
+    if (Object.keys(images).length > 0) {
+      return;
+    }
     try {
       const preset = await fetchAssignedPreset();
       if (preset) {
@@ -75,7 +101,7 @@ export function useCollageCapture(user: User | null) {
         }
       }
     } catch (e) { pushLog(`Sync error in poll: ${String(e)}`); }
-  }, [presetId, pushLog]);
+  }, [presetId, images, pushLog]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -90,6 +116,15 @@ export function useCollageCapture(user: User | null) {
 
       const savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
       if (savedCount) setSubmissionCount(parseInt(savedCount, 10));
+
+      const savedUnlocked = localStorage.getItem(UNLOCKED_QRS_KEY);
+      if (savedUnlocked) {
+        try {
+          setUnlockedQRs(JSON.parse(savedUnlocked));
+        } catch (e) {
+          pushLog("Unlocked QRs restoration failed");
+        }
+      }
 
       loadHistoryFromDB().then(parsed => {
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -126,13 +161,23 @@ export function useCollageCapture(user: User | null) {
           pushLog(`Resuming: ${Object.keys(parsedImages).length} photos`);
         } catch (e) { pushLog("Restoration failed"); }
       } else {
-        void syncPreset();
+        // マウント時の初期同期
+        fetchAssignedPreset().then(preset => {
+          if (preset) {
+            setPresetId(preset.id);
+            setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
+            setThemeMap(preset.themeMap);
+            localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
+            pushLog(`Initial preset synced: ${preset.id}`);
+          }
+        }).catch(e => pushLog(`Initial sync error: ${String(e)}`));
       }
 
     } catch (globalError) {
       pushLog(`CRITICAL MOUNT ERROR: ${String(globalError)}`);
     }
-  }, [pushLog, syncPreset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // データURLを直接セットする（アプリ内カメラ用）
   const setImageDataUrl = useCallback((polygonId: string, dataUrl: string) => {
@@ -214,7 +259,7 @@ export function useCollageCapture(user: User | null) {
   return { 
     template, themeMap, images, errorMessage, 
     submitting, result, collageDataUrl, submissionCount, 
-    collageHistory,
+    collageHistory, unlockedQRs, setUnlockedQRs,
     handleFileChange, setImageDataUrl, submit, reset, pushLog 
   };
 }

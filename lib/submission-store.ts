@@ -131,7 +131,7 @@ export async function listApprovedSubmissions(): Promise<Submission[]> {
       .orderBy("createdAt", "desc")
       .limit(200) // モザイク用に取得件数を増やす
       .get();
-    return snapshot.docs.map(doc => doc.data() as Submission);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
   } catch (e: any) {
     console.error("Firestore list error:", e);
     return [];
@@ -144,7 +144,7 @@ export async function listAllSubmissions(): Promise<Submission[]> {
       .orderBy("createdAt", "desc")
       .limit(500)
       .get();
-    return snapshot.docs.map((doc) => doc.data() as Submission);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
   } catch (e: any) {
     console.error("Firestore list(all) error:", e);
     return [];

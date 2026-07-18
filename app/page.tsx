@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
+import { getSlotLockId } from "@/lib/collage-config";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -13,6 +14,7 @@ export default function Home() {
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
+    unlockedQRs, setUnlockedQRs,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
@@ -28,6 +30,47 @@ export default function Home() {
   const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
   const selectedSlotIndex = template?.polygons.findIndex(p => p.id === selectedSlotId) ?? -1;
   const selectedSlotColor = selectedSlotIndex >= 0 ? SLOT_COLORS[selectedSlotIndex % SLOT_COLORS.length] : "#CA0000";
+
+  // ロック判定
+  const totalSlots = template?.polygons.length ?? 0;
+  const lockId = template && selectedSlotIndex >= 0 ? getSlotLockId(selectedSlotIndex, totalSlots) : null;
+  const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // URLの ?unlock=... パラメータを監視
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const unlockVal = params.get("unlock");
+      if (unlockVal) {
+        if (!unlockedQRs.includes(unlockVal)) {
+          setUnlockedQRs(prev => {
+            const next = [...prev];
+            if (!next.includes(unlockVal)) {
+              next.push(unlockVal);
+            }
+            return next;
+          });
+          
+          // ポップアップ/トーストを表示
+          let friendlyName = `QRコード ${unlockVal}`;
+          if (unlockVal.includes("_")) {
+            const parts = unlockVal.split("_");
+            friendlyName = `${parts[0]}枚コラージュの「QRコード ${parts[1] === "1" ? "A" : "B"}」`;
+          }
+          setToastMessage(`🔑 ${friendlyName} を読み取り、枠を開放しました！`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }
+        
+        // クエリパラメータをURLから削除してスッキリさせる
+        params.delete("unlock");
+        const newSearch = params.toString();
+        const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
+        window.history.replaceState({}, "", newPath);
+      }
+    }
+  }, [unlockedQRs, setUnlockedQRs]);
 
   const getContrastColor = (hex: string) => 
     (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
@@ -73,6 +116,13 @@ export default function Home() {
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
       <CollageBackground />
+
+      {/* トースト表示 */}
+      {toastMessage && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm bg-zinc-900 text-white px-4 py-3 rounded-sm border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)] text-center text-sm font-bold animate-popup">
+          {toastMessage}
+        </div>
+      )}
       <header 
         className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
         style={{ transform: "rotate(-1deg)" }}
@@ -206,6 +256,7 @@ export default function Home() {
                     selectedSlotId={selectedSlotId}
                     onSlotSelect={setSelectedSlotId}
                     onLog={pushLog}
+                    unlockedQRs={unlockedQRs}
                   />
                 </section>
               )}
@@ -297,22 +348,38 @@ export default function Home() {
         </section>
       )}
 
-      {/* 下部固定カメラボタン — 枠選択中かつ作成タブかつ未投稿時のみ表示 */}
+      {/* 下部固定カメラボタン/ロック表示 — 枠選択中かつ作成タブかつ未投稿時のみ表示 */}
       {activeTab === "create" && !result && selectedSlotId && template && (
         <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up pb-5">
           <div className="mx-auto max-w-md px-4 pt-3 flex justify-center">
-            <button
-              onClick={() => setIsCameraOpen(true)}
-              className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-black"
-              style={{ 
-                backgroundColor: selectedSlotColor, 
-                color: getContrastColor(selectedSlotColor),
-                transform: "rotate(1deg)" 
-              }}
-            >
-              <span className="text-xl">📸</span>
-              <span className="tracking-widest">{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
-            </button>
+            {isLocked ? (
+              <div 
+                className="w-[90%] py-4 px-4 rounded-sm text-center text-xs font-bold shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] border-2 border-dashed border-zinc-500 bg-zinc-100 flex flex-col items-center justify-center gap-1"
+                style={{ transform: "rotate(1deg)" }}
+              >
+                <span className="text-sm flex items-center gap-1 text-zinc-800">
+                  <span>🔒</span> ロック中
+                </span>
+                <span className="text-[11px] text-zinc-500 font-bold leading-normal">
+                  {totalSlots === 6 
+                    ? `この枠を撮影するには、会場内にある「QRコード ${lockId === "6_1" ? "A" : "B"}」を探してスキャンしてください！`
+                    : `この枠を撮影するには、会場内にある「QRコード」を探してスキャンしてください！`}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsCameraOpen(true)}
+                className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-black"
+                style={{ 
+                  backgroundColor: selectedSlotColor, 
+                  color: getContrastColor(selectedSlotColor),
+                  transform: "rotate(1deg)" 
+                }}
+              >
+                <span className="text-xl">📸</span>
+                <span className="tracking-widest">{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
+              </button>
+            )}
           </div>
         </div>
       )}

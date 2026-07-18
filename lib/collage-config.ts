@@ -84,6 +84,19 @@ export function buildThemeMapFromPreset(template: FrameTemplate, preset: Capture
   }, {});
 }
 
+export function getSlotLockId(slotIndex: number, totalSlots: number): string | null {
+  if (totalSlots === 4) {
+    if (slotIndex === 3) return "4_1";
+  } else if (totalSlots === 5) {
+    if (slotIndex === 4) return "5_1";
+  } else if (totalSlots === 6) {
+    if (slotIndex === 4) return "6_1";
+    if (slotIndex === 5) return "6_2";
+  }
+  return null;
+}
+
 export function pickRandomTemplate(): FrameTemplate {
   return FRAME_TEMPLATES[Math.floor(Math.random() * FRAME_TEMPLATES.length)];
 }
+
