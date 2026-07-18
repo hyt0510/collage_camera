@@ -52,8 +52,8 @@ export default function MonitorPage() {
 
     fetchSubmissions();
 
-    // 10秒毎にポーリング
-    const interval = setInterval(fetchSubmissions, 10000);
+    // 5分毎にポーリング (Firestoreの読み取りコストを抑えるため)
+    const interval = setInterval(fetchSubmissions, 300000);
 
     return () => clearInterval(interval);
   }, []);

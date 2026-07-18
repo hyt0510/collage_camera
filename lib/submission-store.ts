@@ -129,7 +129,7 @@ export async function listApprovedSubmissions(): Promise<Submission[]> {
     const snapshot = await db.collection("submissions")
       .where("status", "==", "approved")
       .orderBy("createdAt", "desc")
-      .limit(200) // モザイク用に取得件数を増やす
+      .limit(500) // モザイク用に取得件数を増やす (278枠をすべて埋めるため500に拡張)
       .get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
   } catch (e: any) {
