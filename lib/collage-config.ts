@@ -16,6 +16,9 @@ export type CapturePreset = {
   name: string;
   templateId: string;
   themes: string[];
+  slotLocks?: Record<string, string>;
+  lockMessages?: Record<string, string>;
+  unlockMessages?: Record<string, string>;
 };
 
 export const FRAME_TEMPLATES: FrameTemplate[] = [
@@ -67,7 +70,7 @@ export const FRAME_TEMPLATES: FrameTemplate[] = [
 ];
 
 export const CAPTURE_THEMES = config.themes;
-export const CAPTURE_PRESETS: CapturePreset[] = config.presets;
+export const CAPTURE_PRESETS: CapturePreset[] = config.presets as unknown as CapturePreset[];
 
 export function findTemplateById(templateId: string): FrameTemplate | null {
   return FRAME_TEMPLATES.find((template) => template.id === templateId) ?? null;
@@ -84,14 +87,28 @@ export function buildThemeMapFromPreset(template: FrameTemplate, preset: Capture
   }, {});
 }
 
-export function getSlotLockId(slotIndex: number, totalSlots: number): string | null {
-  if (totalSlots === 4) {
-    if (slotIndex === 3) return "4_1";
-  } else if (totalSlots === 5) {
-    if (slotIndex === 4) return "5_1";
-  } else if (totalSlots === 6) {
-    if (slotIndex === 4) return "6_1";
-    if (slotIndex === 5) return "6_2";
+export function getSlotLockId(presetId: string, slotIndex: number): string | null {
+  const preset = getPresetById(presetId);
+  if (preset && preset.slotLocks && preset.slotLocks[String(slotIndex)]) {
+    return preset.slotLocks[String(slotIndex)];
+  }
+  return null;
+}
+
+export function getSlotLockMessage(presetId: string, slotIndex: number): string | null {
+  const preset = getPresetById(presetId);
+  return preset?.lockMessages?.[String(slotIndex)] ?? null;
+}
+
+export function getUnlockMessageByLockId(lockId: string): string | null {
+  for (const preset of CAPTURE_PRESETS) {
+    if (preset.slotLocks) {
+      for (const [slotIndex, id] of Object.entries(preset.slotLocks)) {
+        if (id === lockId) {
+          return preset.unlockMessages?.[slotIndex] ?? null;
+        }
+      }
+    }
   }
   return null;
 }
