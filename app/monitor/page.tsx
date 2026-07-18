@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+// Firebase クライアントの読み込みを削除 (API経由でデータを取得するため)
+import { GRID_COLS, GRID_ROWS, generateCollageMosaicPlacements } from "@/lib/utils/mosaic";
+import { CollageBackground } from "@/components/features/collage/CollageBackground";
 
 type MonitorSubmission = {
   id: string;
@@ -12,9 +13,8 @@ type MonitorSubmission = {
   collageDataUrl?: string;
 };
 
-// モザイクアートの設定 (16x48)
-const GRID_COLS = 16;
-const GRID_ROWS = 48;
+// モザイクアートの設定は mosaic.ts からインポート
+const placements = generateCollageMosaicPlacements();
 
 export default function MonitorPage() {
   const [submissions, setSubmissions] = useState<MonitorSubmission[]>([]);
@@ -24,46 +24,41 @@ export default function MonitorPage() {
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-      setError("Environment variables are missing.");
-      return;
-    }
+    const fetchSubmissions = async () => {
+      try {
+        const res = await fetch("/api/submissions");
+        if (!res.ok) throw new Error("Failed to fetch submissions");
+        const data = await res.json();
+        const nextItems = (data.submissions || []) as MonitorSubmission[];
+        
+        setError(null);
 
-    const q = query(
-      collection(db, "submissions"),
-      where("status", "==", "approved"),
-      orderBy("createdAt", "desc"),
-      limit(400) // 300人+αをカバー
-    );
+        const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
+        
+        if (!isFirstLoad.current && newItems.length > 0) {
+          const latest = newItems[0]!;
+          setPopup(latest);
+          setTimeout(() => setPopup(null), 3000);
+        }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setError(null);
-      const nextItems = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as MonitorSubmission[];
-
-      const newItems = nextItems.filter((item) => !knownIds.current.has(item.id));
-      
-      if (!isFirstLoad.current && newItems.length > 0) {
-        const latest = newItems[0]!;
-        setPopup(latest);
-        const timer = window.setTimeout(() => setPopup(null), 3000);
-        return () => window.clearTimeout(timer);
+        knownIds.current = new Set(nextItems.map((item) => item.id));
+        setSubmissions(nextItems);
+        isFirstLoad.current = false;
+      } catch (err: any) {
+        console.error("Fetch error:", err);
+        setError(`Fetch Error: ${err.message}`);
       }
+    };
 
-      knownIds.current = new Set(nextItems.map((item) => item.id));
-      setSubmissions(nextItems);
-      isFirstLoad.current = false;
-    }, (err) => {
-      console.error("Firestore error:", err);
-      setError(`Firestore Error: ${err.message}`);
-    });
+    fetchSubmissions();
 
-    return () => unsubscribe();
+    // 10秒毎にポーリング
+    const interval = setInterval(fetchSubmissions, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  // 16x48 のグリッドマップを作成
+  // グリッドマップを作成
   const grid = useMemo(() => {
     const map = new Map<string, MonitorSubmission>();
     // 古い順に配置して新しいものを上書き
@@ -77,15 +72,8 @@ export default function MonitorPage() {
   }, [submissions]);
 
   return (
-    <main className="relative min-h-screen bg-black text-white p-2">
-      <header className="absolute top-4 left-4 z-10 flex flex-col gap-0.5 mix-blend-difference">
-        <h1 className="text-3xl font-black italic tracking-tighter text-indigo-500 leading-none">
-          COLLAGE <span className="text-white">MOSAIC</span>
-        </h1>
-        <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
-          Collaborative Art Piece / {submissions.length} Fragments
-        </p>
-      </header>
+    <main className="relative min-h-screen bg-[#F5F3EE] text-zinc-900 p-2 overflow-hidden flex items-center justify-center">
+      <CollageBackground isOverlay={false} />
 
       {error && (
         <div className="absolute top-20 left-4 z-20 max-w-xs rounded-lg bg-rose-500/20 p-3 border border-rose-500/30 backdrop-blur-md">
@@ -95,32 +83,49 @@ export default function MonitorPage() {
 
       {/* 高密度グリッド表示 */}
       <section 
-        className="mx-auto grid gap-[1px] w-full max-w-[95vh] aspect-[9/27]"
+        className="mx-auto grid w-full max-w-[95vw] aspect-[16/9] relative z-10"
         style={{
           gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
           gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
+          gap: "3px" // コラージュらしく少し隙間をあける
         }}
       >
-        {Array.from({ length: GRID_ROWS * GRID_COLS }).map((_, index) => {
-          const row = Math.floor(index / GRID_COLS);
-          const col = index % GRID_COLS;
-          const item = grid.get(`${row}-${col}`);
+        {placements.map((p) => {
+          const item = grid.get(`${p.row}-${p.col}`);
           const displayUrl = item?.collageImageUrl || item?.collageDataUrl || (item?.items?.[0]?.imageUrl || item?.items?.[0]?.dataUrl);
           
+          // 固定シードによるランダムな回転とスケールでコラージュ感を演出
+          const randomRot = ((p.row * 13 + p.col * 7) % 21) - 10; // -10 to +10 degrees
+          const randomScale = 1 + (((p.row * 7 + p.col * 11) % 10) / 40); // 1.0 to 1.25
+
           return (
             <div
-              key={`${row}-${col}`}
-              className={`relative overflow-hidden transition-all duration-1000 ${
-                item ? "bg-zinc-800" : "bg-zinc-900/20"
-              }`}
+              key={`${p.row}-${p.col}`}
+              className="relative transition-all duration-1000 group hover:z-50 hover:scale-150"
+              style={{
+                gridColumn: p.col + 1,
+                gridRow: p.row + 1,
+                zIndex: item ? 10 : 1,
+              }}
             >
-              {displayUrl && (
-                <img
-                  src={displayUrl}
-                  alt=""
-                  className="h-full w-full object-cover animate-in fade-in zoom-in-50 duration-1000"
-                />
-              )}
+              <div 
+                className="w-full h-full transition-all duration-700 shadow-[2px_3px_5px_rgba(0,0,0,0.2)]"
+                style={{
+                  transform: `rotate(${randomRot}deg) scale(${randomScale})`,
+                  backgroundColor: item ? "#fff" : "#E5E5E5",
+                  padding: "2px", // 白枠(写真のフチ)
+                }}
+              >
+                {displayUrl ? (
+                  <img
+                    src={displayUrl}
+                    alt=""
+                    className="h-full w-full object-cover animate-in fade-in zoom-in duration-1000"
+                  />
+                ) : (
+                  <div className="w-full h-full border border-dashed border-zinc-300 opacity-50" />
+                )}
+              </div>
             </div>
           );
         })}
