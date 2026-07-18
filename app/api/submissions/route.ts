@@ -36,27 +36,66 @@ async function verifyAuthToken(request: Request): Promise<{ uid: string } | null
   }
 }
 
+// 承認済み投稿のインメモリキャッシュと制御フラグ
+let cachedApprovedSubmissions: any = null;
+let lastFetchedApproved: number = 0;
+let hasNewSubmissions: boolean = false; // 新着投稿があったかどうかのフラグ
+const CACHE_MAX_TTL_MS = 30000; // 最長キャッシュ期間 (30秒)
+const CACHE_MIN_INTERVAL_MS = 5000; // 最短データ取得間隔 (5秒)
+
 export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope");
-    const submissions =
-      scope === "all" ? await listAllSubmissions() : await listApprovedSubmissions();
+    if (scope === "all") {
+      // 管理用画面はリアルタイム性を優先するためキャッシュしない
+      const submissions = await listAllSubmissions();
+      const serialized = submissions.map((submission) => ({
+        ...submission,
+        items: submission.items.map((item) => ({
+          ...item,
+          dataUrl: item.imageUrl,
+        })),
+        collageDataUrl: submission.collageImageUrl,
+      }));
+      return NextResponse.json({ submissions: serialized });
+    }
 
-    const serialized = submissions.map((submission) => ({
-      ...submission,
-      items: submission.items.map((item) => ({
-        ...item,
-        dataUrl: item.imageUrl,
-      })),
-      collageDataUrl: submission.collageImageUrl,
-    }));
+    const now = Date.now();
+    
+    // データ再取得が必要かどうかの判定
+    // 1. キャッシュがまだ無い場合
+    // 2. キャッシュの最長寿命(30秒)が切れた場合
+    // 3. 新着投稿があり、かつ前回のFirestore取得から最低間隔(5秒)が経過している場合
+    const needsRefetch = 
+      !cachedApprovedSubmissions || 
+      (now - lastFetchedApproved > CACHE_MAX_TTL_MS) ||
+      (hasNewSubmissions && (now - lastFetchedApproved > CACHE_MIN_INTERVAL_MS));
 
-    return NextResponse.json({ submissions: serialized });
+    if (needsRefetch) {
+      const submissions = await listApprovedSubmissions();
+      cachedApprovedSubmissions = submissions.map((submission) => ({
+        ...submission,
+        items: submission.items.map((item) => ({
+          ...item,
+          dataUrl: item.imageUrl,
+        })),
+        collageDataUrl: submission.collageImageUrl,
+      }));
+      lastFetchedApproved = now;
+      hasNewSubmissions = false; // フラグをリセット
+      console.log(`[API Cache] Fetched from Firestore (Reason: ${hasNewSubmissions ? 'New Submission' : 'TTL Expired'}). Next min refetch in ${CACHE_MIN_INTERVAL_MS / 1000}s`);
+    } else {
+      console.log(`[API Cache] Serving cached submissions. Cache age: ${(now - lastFetchedApproved) / 1000}s`);
+    }
+
+    return NextResponse.json({ submissions: cachedApprovedSubmissions });
   } catch (e: any) {
     console.error("GET /api/submissions error:", e);
     return NextResponse.json({ error: "Fetch failed", details: e.message }, { status: 500 });
   }
 }
+
+
 
 export async function POST(request: Request) {
   // 0. Firebase IDトークン検証
@@ -109,6 +148,9 @@ export async function POST(request: Request) {
         moderation: moderationResults[index],
       })),
     });
+
+    // 新着投稿があったフラグを立てる (次回GET時にスロットリング付きで反映)
+    hasNewSubmissions = true;
 
     return NextResponse.json({
       id: submission.id,
