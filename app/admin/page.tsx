@@ -82,7 +82,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     void refresh();
-    const timerId = window.setInterval(() => void refresh(), 5000);
+    // 管理画面のポーリングを30秒に延長 (Firestoreの読み取りを節約するため。必要な時は手動リロードも可能)
+    const timerId = window.setInterval(() => void refresh(), 30000);
     return () => window.clearInterval(timerId);
   }, [refresh]);
 
