@@ -7,11 +7,12 @@ interface Props {
   imageDataUrl: string;
   theme: string;
   slotColor: string;
+  clipPath?: string;
   onRetake: () => void;
   onUse: () => void;
 }
 
-export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, onRetake, onUse }: Props) {
+export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath, onRetake, onUse }: Props) {
   return (
     <div className="absolute inset-0 bg-zinc-50 flex flex-col animate-preview-in p-6 pt-16 z-50 overflow-hidden">
       <CollageBackground />
@@ -23,7 +24,10 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, onRetake,
         >
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-6 rotate-3 masking-tape opacity-90 z-10" style={{ backgroundColor: slotColor }} />
           
-          <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-200">
+          <div 
+            className="relative aspect-[9/16] w-full overflow-hidden bg-zinc-200"
+            style={clipPath ? { clipPath, WebkitClipPath: clipPath } : undefined}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageDataUrl}

@@ -299,6 +299,7 @@ export function CameraScreen({
           imageDataUrl={capturedImage}
           theme={theme}
           slotColor={slotColor}
+          clipPath={clipPath}
           onRetake={handleRetake}
           onUse={handleUsePhoto}
         />
