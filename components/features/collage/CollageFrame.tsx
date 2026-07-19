@@ -67,13 +67,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
             >
               {image && (
                 <div 
-                  className="absolute animate-paste-in"
-                  style={{
-                    left: `${box.left}%`,
-                    top: `${box.top}%`,
-                    width: `${box.width}%`,
-                    height: `${box.height}%`,
-                  }}
+                  className="absolute inset-0 animate-paste-in"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img

@@ -17,15 +17,15 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
     <div className="absolute inset-0 bg-zinc-50 flex flex-col animate-preview-in p-6 pt-16 z-50 overflow-hidden">
       <CollageBackground />
       {/* プレビュー画像（スクラップブック風） */}
-      <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 min-h-0 py-4 mt-4">
         <div 
-          className="scrapbook-photo w-full max-w-sm relative"
+          className="scrapbook-photo relative mx-auto h-full max-h-[55vh] aspect-[9/16]"
           style={{ transform: "rotate(-2deg)" }}
         >
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-6 rotate-3 masking-tape opacity-90 z-10" style={{ backgroundColor: slotColor }} />
           
           <div 
-            className="relative aspect-[9/16] w-full overflow-hidden bg-zinc-200"
+            className="relative w-full h-full overflow-hidden bg-zinc-200"
             style={clipPath ? { clipPath, WebkitClipPath: clipPath } : undefined}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -37,8 +37,8 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
           </div>
           
           {/* テーマ手書き風 */}
-          <div className="mt-4 text-center">
-            <p className="text-xl font-bold text-zinc-800">{theme}</p>
+          <div className="absolute -bottom-10 left-0 right-0 text-center w-full">
+            <p className="text-xl font-bold text-zinc-800 whitespace-nowrap">{theme}</p>
           </div>
         </div>
       </div>
