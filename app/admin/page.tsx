@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { saveHistoryToDB } from "@/lib/utils/idb";
 
 type Submission = {
   id: string;
@@ -146,6 +147,23 @@ export default function AdminPage() {
     [submissions],
   );
 
+  async function resetClientState() {
+    if (!confirm("このブラウザのテスト用データ（撮影回数、ロック解除状態、撮影中の画像、履歴など）をリセットしますか？")) return;
+    try {
+      localStorage.removeItem("collage_v10_img");
+      localStorage.removeItem("collage_v10_preset");
+      localStorage.removeItem("collage_v10_count");
+      localStorage.removeItem("collage_v10_unlocked_qrs");
+      localStorage.removeItem("collage_v10_history");
+      
+      await saveHistoryToDB([]);
+      alert("自身のテスト状態（撮影回数・ロック・履歴）をリセットしました！");
+    } catch (e) {
+      console.error(e);
+      alert("ローカルストレージのリセットに成功しましたが、IndexedDBの履歴リセットに失敗しました。");
+    }
+  }
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl p-4">
       <header className="rounded-2xl bg-white p-4 shadow-sm flex justify-between items-center">
@@ -155,12 +173,20 @@ export default function AdminPage() {
             手動審査待ち: <span className="font-semibold">{pendingCount}</span> 件
           </p>
         </div>
-        <button
-          onClick={removeAll}
-          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors"
-        >
-          全投稿を一括削除
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={resetClientState}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors"
+          >
+            自身のテスト状態をリセット
+          </button>
+          <button
+            onClick={removeAll}
+            className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors"
+          >
+            全投稿を一括削除
+          </button>
+        </div>
       </header>
 
       {error ? (

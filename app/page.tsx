@@ -126,11 +126,22 @@ export default function Home() {
   // 全枠埋まっているかチェック
   const allFilled = template?.polygons.every(p => !!images[p.id]) ?? false;
 
-  const handleSaveImage = (dataUrl: string) => {
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `collage_${new Date().getTime()}.jpg`;
-    link.click();
+  const handleSaveImage = async (e: React.MouseEvent<HTMLAnchorElement>, dataUrl: string) => {
+    if (navigator.share) {
+      e.preventDefault();
+      try {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const file = new File([blob], `collage_${new Date().getTime()}.jpg`, { type: "image/jpeg" });
+        await navigator.share({
+          files: [file],
+          title: "コラージュ画像",
+        });
+      } catch (err) {
+        console.error("Share failed, opening in new tab:", err);
+        window.open(dataUrl, "_blank");
+      }
+    }
   };
 
   return (
@@ -233,7 +244,7 @@ export default function Home() {
       {activeTab === "create" ? (
         <>
           {result ? (
-            <section className="rounded-2xl bg-indigo-50 p-5 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300">
+            <section className="rounded-2xl bg-indigo-50 p-5 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 relative z-10">
               <h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
                 投稿完了！
@@ -246,13 +257,17 @@ export default function Home() {
                     alt="Your Collage" 
                     className="w-full h-auto rounded-lg shadow-md border-2 border-white"
                   />
-                  <button
-                    onClick={() => handleSaveImage(collageDataUrl)}
-                    className="mt-3 w-full flex items-center justify-center gap-2 py-3 bg-white text-indigo-600 rounded-xl font-bold border-2 border-indigo-100 hover:bg-indigo-50 active:scale-95 transition-all shadow-sm"
+                  <a
+                    href={collageDataUrl}
+                    download={`collage_${new Date().getTime()}.jpg`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => handleSaveImage(e, collageDataUrl)}
+                    className="mt-3 w-full flex items-center justify-center gap-2 py-3 bg-white text-indigo-600 rounded-xl font-bold border-2 border-indigo-100 hover:bg-indigo-50 active:scale-95 transition-all shadow-sm cursor-pointer"
                   >
                     <span>画像を保存する</span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                  </button>
+                  </a>
                 </div>
               )}
 
@@ -268,7 +283,7 @@ export default function Home() {
           ) : (
             <>
               {template && (
-                <section className="rounded-2xl bg-white p-3 shadow-sm border border-zinc-100">
+                <section className="rounded-2xl bg-white p-3 shadow-sm border border-zinc-100 relative z-10">
                   <CollageFrame
                     template={template}
                     images={images}
@@ -334,7 +349,7 @@ export default function Home() {
           )}
         </>
       ) : (
-        <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
+        <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300 relative z-10">
           <h2 className="text-lg font-bold text-zinc-800 px-2">作成したコラージュ</h2>
           
           {collageHistory.length === 0 ? (
@@ -354,13 +369,17 @@ export default function Home() {
                     <div className="text-[10px] text-zinc-400">
                       {new Date(item.createdAt).toLocaleString()}
                     </div>
-                    <button
-                      onClick={() => handleSaveImage(item.dataUrl)}
-                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors"
+                    <a
+                      href={item.dataUrl}
+                      download={`collage_${new Date().getTime()}.jpg`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => handleSaveImage(e, item.dataUrl)}
+                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                       保存
-                    </button>
+                    </a>
                   </div>
                 </div>
               ))}
