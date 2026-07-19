@@ -11,6 +11,7 @@ interface CameraScreenProps {
   capturedCount: number;
   totalCount: number;
   slotColor: string;
+  clipPath?: string;
   onCapture: (dataUrl: string) => void;
   onClose: () => void;
 }
@@ -22,6 +23,7 @@ export function CameraScreen({
   capturedCount,
   totalCount,
   slotColor,
+  clipPath,
   onCapture,
   onClose,
 }: CameraScreenProps) {
@@ -237,7 +239,7 @@ export function CameraScreen({
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
         <>
-          <CameraPreview stream={stream} showGrid={showGrid} />
+          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
           <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
