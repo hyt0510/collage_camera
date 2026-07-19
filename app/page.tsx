@@ -431,6 +431,7 @@ export default function Home() {
           capturedCount={template.polygons.filter(p => images[p.id]).length}
           totalCount={template.polygons.length}
           slotColor={selectedSlotColor}
+          clipPath={template.polygons.find(p => p.id === selectedSlotId)?.clipPath || ""}
           onCapture={(dataUrl) => {
             setImageDataUrl(selectedSlotId, dataUrl);
             setIsCameraOpen(false);

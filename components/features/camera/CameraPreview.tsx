@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
+import { toSvgPolygonPoints } from "@/lib/utils/styles";
 
 interface Props {
   stream: MediaStream | null;
   showGrid: boolean;
+  clipPath?: string;
+  slotColor?: string;
 }
 
-export function CameraPreview({ stream, showGrid }: Props) {
+export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -33,6 +36,32 @@ export function CameraPreview({ stream, showGrid }: Props) {
         muted
         className="absolute inset-0 w-full h-full object-cover"
       />
+
+      {/* ポリゴンクリップパスオーバーレイ */}
+      {clipPath && (
+        <svg
+          className="pointer-events-none absolute inset-0 w-full h-full z-10"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* 外側を暗くするマスク */}
+          <path
+            d={`M 0,0 L 100,0 L 100,100 L 0,100 Z M ${toSvgPolygonPoints(clipPath)} Z`}
+            fill="rgba(0, 0, 0, 0.6)"
+            fillRule="evenodd"
+          />
+          {/* 枠線 */}
+          <polygon
+            points={toSvgPolygonPoints(clipPath)}
+            fill="none"
+            stroke={slotColor || "#ffffff"}
+            strokeWidth="1.5"
+            strokeDasharray="4 2"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      )}
 
       {/* 3x3 グリッドオーバーレイ */}
       {showGrid && (
