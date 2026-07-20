@@ -180,6 +180,27 @@ export function useCollageCapture(user: User | null) {
         }
       });
 
+      loadHistoryFromDB().then(parsed => {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCollageHistory(parsed.slice(0, 5));
+        } else {
+          // 移行用: IndexedDBになければlocalStorageから読み込む
+          const savedHistory = localStorage.getItem(HISTORY_KEY);
+          if (savedHistory) {
+            try {
+              const oldParsed = JSON.parse(savedHistory);
+              if (Array.isArray(oldParsed)) {
+                setCollageHistory(oldParsed.slice(0, 5));
+                // IndexedDBへ移行保存
+                void saveHistoryToDB(oldParsed.slice(0, 5));
+              }
+            } catch (e) {
+              pushLog("History restoration failed");
+            }
+          }
+        }
+      });
+
       const savedImages = localStorage.getItem(IMAGES_KEY);
       const savedPreset = localStorage.getItem(PRESET_KEY);
       
