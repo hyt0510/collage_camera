@@ -6,7 +6,7 @@ import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
-import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId } from "@/lib/collage-config";
+import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById } from "@/lib/collage-config";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -45,7 +45,23 @@ export default function Home() {
       const unlockVal = params.get("unlock");
       const lockVal = params.get("lock");
 
+      // presetId がロードされるまで待機（初期ロード中のみ）
+      if (unlockVal && !presetId) return;
+
       if (unlockVal) {
+        const preset = presetId ? getPresetById(presetId) : null;
+        const isValid = preset?.slotLocks ? Object.values(preset.slotLocks).includes(unlockVal) : false;
+
+        if (!isValid) {
+          setToastMessage("このQRコードは現在のテーマでは使用できません");
+          setTimeout(() => setToastMessage(null), 4000);
+          params.delete("unlock");
+          const newSearch = params.toString();
+          const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
+          window.history.replaceState({}, "", newPath);
+          return;
+        }
+
         if (!unlockedQRs.includes(unlockVal)) {
           setUnlockedQRs(prev => {
             const next = [...prev];
@@ -90,7 +106,7 @@ export default function Home() {
         window.history.replaceState({}, "", newPath);
       }
     }
-  }, [unlockedQRs, setUnlockedQRs]);
+  }, [unlockedQRs, setUnlockedQRs, presetId]);
 
   const getContrastColor = (hex: string) => 
     (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";

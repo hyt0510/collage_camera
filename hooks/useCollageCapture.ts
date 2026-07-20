@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { User } from "firebase/auth";
 import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
 import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
@@ -36,6 +36,7 @@ export function useCollageCapture(user: User | null) {
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
   const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
+  const isUnlockedQRsInitialized = useRef(false);
 
   const pushLog = useCallback((_msg: string) => {}, []);
 
@@ -71,6 +72,7 @@ export function useCollageCapture(user: User | null) {
 
   // unlockedQRs の localStorage 同期
   useEffect(() => {
+    if (!isUnlockedQRsInitialized.current) return;
     try {
       localStorage.setItem(UNLOCKED_QRS_KEY, JSON.stringify(unlockedQRs));
     } catch (e) {
@@ -155,6 +157,7 @@ export function useCollageCapture(user: User | null) {
           pushLog("Unlocked QRs restoration failed");
         }
       }
+      isUnlockedQRsInitialized.current = true;
 
       loadHistoryFromDB().then(parsed => {
         if (Array.isArray(parsed) && parsed.length > 0) {
