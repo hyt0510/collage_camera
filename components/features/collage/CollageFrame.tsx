@@ -25,8 +25,9 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
   }, {});
 
   return (
-    <div className="mx-auto w-full rounded-[24px] bg-zinc-300 p-2 shadow-inner">
-      <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
+    // 親の高さに合わせて 9:16 のまま縮む（一画面に収めるため、横幅ではなく高さを基準にする）
+    <div className="mx-auto h-full w-fit rounded-[24px] bg-zinc-300 p-2 shadow-inner">
+      <div className="relative aspect-[9/16] h-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
         {template.polygons.map((polygon, index) => {
           const image = images[polygon.id];
           const color = slotColorMap[polygon.id]!;

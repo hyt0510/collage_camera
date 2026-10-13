@@ -6,6 +6,9 @@ import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
+import { CapturePanel } from "@/components/features/collage/CapturePanel";
+import { LockedSlotsChip } from "@/components/features/collage/LockedSlotsChip";
+import { getCapturePanelMode } from "@/lib/utils/capture-panel";
 import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById, getPendingLockMessages } from "@/lib/collage-config";
 import { findNextSlotId } from "@/lib/utils/slots";
 
@@ -143,6 +146,7 @@ export default function Home() {
 
   // 全枠埋まっているかチェック
   const allFilled = template?.polygons.every(p => !!images[p.id]) ?? false;
+  const panelMode = getCapturePanelMode({ hasSelection: !!selectedSlotId && !!template, isLocked, allFilled });
 
   const handleSaveImage = async (e: React.MouseEvent<HTMLAnchorElement>, dataUrl: string) => {
     if (navigator.share) {
@@ -163,7 +167,12 @@ export default function Home() {
   };
 
   return (
-    <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-5 bg-zinc-50 pb-28">
+    // 作成タブ（完了画面を含む）は画面の高さちょうどに収める。小さい端末では main の中でスクロールする
+    <main
+      className={`relative mx-auto flex w-full max-w-md flex-col gap-2 px-4 py-3 bg-zinc-50 ${
+        activeTab === "create" ? "h-dvh overflow-y-auto" : "min-h-dvh"
+      }`}
+    >
       <CollageBackground />
 
       {/* トースト表示 */}
@@ -172,32 +181,27 @@ export default function Home() {
           {toastMessage}
         </div>
       )}
-      <header 
-        className="rounded-sm bg-zinc-50 p-4 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10"
-        style={{ transform: "rotate(-1deg)" }}
+      {/* ヘッダー（一画面に収めるため1行にまとめる） */}
+      <header
+        className="shrink-0 rounded-sm bg-zinc-50 px-3 py-2 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10 flex items-center justify-between gap-2"
+        style={{ transform: "rotate(-0.5deg)" }}
       >
-        <div className="absolute -top-2 left-4 w-12 h-4 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#CA0000" }} />
-        <div className="absolute -top-2 right-4 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#010193" }} />
-        
-        <div className="flex justify-between items-start pt-1">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 tracking-wider">collage</h1>
-            <p className="mt-1 text-sm text-zinc-600 font-bold">
-              写真を撮影して、モニターに投稿しよう！
-            </p>
-          </div>
+        <div className="absolute -top-1.5 left-4 w-10 h-3 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#CA0000" }} />
+
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-zinc-900 tracking-wider">collage</h1>
           {submissionCount > 0 && (
-            <div className="bg-zinc-800 text-white px-3 py-1 rounded-sm text-xs font-bold shadow-sm" style={{ transform: "rotate(2deg)" }}>
+            <div className="bg-zinc-800 text-white px-2 py-0.5 rounded-sm text-[10px] font-bold shadow-sm" style={{ transform: "rotate(2deg)" }}>
               {submissionCount}回目
             </div>
           )}
         </div>
-        
+
         {/* タブ切り替え（手書きノート風） */}
-        <div className="mt-4 flex gap-2">
+        <div className="flex gap-1.5">
           <button
             onClick={() => setActiveTab("create")}
-            className={`flex-1 py-2 text-sm font-bold border-2 transition-all ${
+            className={`w-16 py-1 text-xs font-bold border-2 transition-all ${
               activeTab === "create" 
                 ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5" 
                 : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
@@ -211,7 +215,7 @@ export default function Home() {
               setActiveTab("history");
               markHistoryRead();
             }}
-            className={`flex-1 py-2 text-sm font-bold border-2 transition-all relative ${
+            className={`w-16 py-1 text-xs font-bold border-2 transition-all relative ${
               activeTab === "history" 
                 ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5" 
                 : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
@@ -220,177 +224,118 @@ export default function Home() {
           >
             履歴
             {hasUnreadHistory && (
-              <span className="absolute top-1 right-2 w-2 h-2 bg-rose-500 rounded-full border border-rose-700"></span>
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border border-rose-700"></span>
             )}
           </button>
         </div>
       </header>
 
-      {/* 選択中テーマの固定表示バー */}
-      {activeTab === "create" && !result && (
-        <div className="sticky top-3 z-40 pt-1 pb-2">
-          <div
-            className="rounded-sm px-5 py-4 shadow-[0_6px_16px_rgba(0,0,0,0.15)] transition-all duration-200 relative overflow-hidden backdrop-blur-md"
-            style={{
-              backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderColor: selectedTheme ? selectedSlotColor : "#fef08a",
-              borderWidth: selectedTheme ? "2px" : "1px",
-              borderStyle: "solid",
-              transform: "rotate(-1deg)",
-            }}
-          >
-            {/* テープ装飾 */}
-            <div 
-              className="absolute -top-2 left-1/2 -translate-x-1/2 w-16 h-5 rotate-2 masking-tape opacity-90" 
-              style={{ backgroundColor: selectedSlotColor }} 
-            />
-            
-            {selectedTheme ? (
-              <div key={selectedSlotId} className="animate-theme-fade text-center mt-1">
-                <p className="text-xs font-bold text-zinc-500 mb-1 tracking-wider">テーマ</p>
-                <p className="text-lg font-bold text-zinc-800 leading-snug">{selectedTheme}</p>
-                {hasImageInSelected && (
-                  <p className="text-[11px] text-emerald-600 font-bold mt-2">✓ 撮影済み — タップで撮り直せます</p>
-                )}
-              </div>
-            ) : (
-              <div className="text-center mt-1">
-                <p className="text-sm font-bold text-zinc-600">枠をタップしてテーマを確認 👆</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {activeTab === "create" ? (
         <>
           {result ? (
-            <section className="rounded-2xl bg-indigo-50 p-5 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 relative z-10">
-              <h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
-                投稿完了！
-              </h2>
-              {result.status === "pending_manual" && (
-                <p className="mt-2 text-xs text-indigo-700">
-                  運営スタッフが確認したあと、モニターに表示されます。
-                </p>
-              )}
-              
+            // 完了画面も一画面に収める（画像は残った高さに合わせて縮める）
+            <section className="flex flex-1 min-h-0 flex-col gap-3 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 relative z-10">
+              <div className="shrink-0">
+                <h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
+                  投稿完了！
+                </h2>
+                {result.status === "pending_manual" && (
+                  <p className="mt-1 text-xs text-indigo-700">
+                    運営スタッフが確認したあと、モニターに表示されます。
+                  </p>
+                )}
+              </div>
+
               {collageDataUrl && (
-                <div className="mt-4 relative group">
-                  <img 
-                    src={collageDataUrl} 
-                    alt="Your Collage" 
-                    className="w-full h-auto rounded-lg shadow-md border-2 border-white"
+                <div className="flex flex-1 min-h-[320px] justify-center">
+                  <img
+                    src={collageDataUrl}
+                    alt="Your Collage"
+                    className="h-full w-auto max-w-full object-contain rounded-lg shadow-md border-2 border-white"
                   />
+                </div>
+              )}
+
+              <div className="shrink-0 flex gap-2">
+                {collageDataUrl && (
                   <a
                     href={collageDataUrl}
                     download={`collage_${new Date().getTime()}.jpg`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => handleSaveImage(e, collageDataUrl)}
-                    className="mt-3 w-full flex items-center justify-center gap-2 py-3 bg-white text-indigo-600 rounded-xl font-bold border-2 border-indigo-100 hover:bg-indigo-50 active:scale-95 transition-all shadow-sm cursor-pointer"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-white text-indigo-600 rounded-xl font-bold border-2 border-indigo-100 hover:bg-indigo-50 active:scale-95 transition-all shadow-sm cursor-pointer"
                   >
-                    <span>画像を保存する</span>
+                    <span>画像を保存</span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                   </a>
-                </div>
-              )}
-
-              <div className="mt-4 space-y-3 pt-3 border-t border-indigo-100 text-center">
+                )}
                 <button
                   onClick={reset}
-                  className="text-indigo-600 font-bold hover:underline"
+                  className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold active:scale-95 transition-all shadow-sm"
                 >
-                  もう一度作成する
+                  もう一度作成
                 </button>
               </div>
             </section>
           ) : (
             <>
-              {/* まだ解除していないロック枠の案内（撮る順番は自由なので、先に一覧で伝える） */}
-              {pendingLockMessages.length > 0 && (
-                <section
-                  className="rounded-sm bg-white px-4 py-3 border-2 border-dashed border-zinc-400 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] relative z-10"
-                  style={{ transform: "rotate(0.5deg)" }}
-                >
-                  <p className="text-sm font-bold text-zinc-800">🔒 QRコードで開く枠があります</p>
-                  <p className="mt-0.5 text-[11px] font-bold text-zinc-500">
-                    撮る順番は自由です。ほかの枠から先に撮れます
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {pendingLockMessages.map((message) => (
-                      <li key={message} className="text-xs text-zinc-700 leading-relaxed">
-                        ・{message}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+              {/* まだ解除していないロック枠の案内（撮る順番は自由なので、先に伝える） */}
+              {pendingLockMessages.length > 0 && <LockedSlotsChip messages={pendingLockMessages} />}
 
+              {/* フレームは残った高さに合わせて縮む。小さい端末では 320px で止めてスクロールさせる */}
               {template && (
-                <section className="rounded-2xl bg-white p-3 shadow-sm border border-zinc-100 relative z-10">
-                  <CollageFrame
-                    template={template}
-                    images={images}
-                    themeMap={themeMap}
-                    selectedSlotId={selectedSlotId}
-                    onSlotSelect={setSelectedSlotId}
-                    onLog={pushLog}
-                    unlockedQRs={unlockedQRs}
-                    presetId={presetId}
-                  />
-                </section>
-              )}
-
-              {/* 進捗インジケーター */}
-              {template && (
-                <div className="flex items-center justify-center gap-2 py-2 mt-2">
-                  {template.polygons.map((p, i) => (
-                    <div
-                      key={p.id}
-                      className={`w-3 h-3 rounded-full transition-all duration-200 border-2 ${
-                        images[p.id] ? "scale-100 border-transparent" : "scale-75 border-zinc-300 bg-transparent"
-                      }`}
-                      style={{
-                        backgroundColor: images[p.id]
-                          ? SLOT_COLORS[i % SLOT_COLORS.length]
-                          : "transparent",
-                        transform: images[p.id] ? `rotate(${Math.random() * 20 - 10}deg)` : "none",
-                      }}
+                <section className="relative z-10 flex flex-1 min-h-[320px] flex-col items-center gap-1">
+                  <div className="flex-1 min-h-0 w-full">
+                    <CollageFrame
+                      template={template}
+                      images={images}
+                      themeMap={themeMap}
+                      selectedSlotId={selectedSlotId}
+                      onSlotSelect={setSelectedSlotId}
+                      onLog={pushLog}
+                      unlockedQRs={unlockedQRs}
+                      presetId={presetId}
                     />
-                  ))}
-                  <span className="ml-3 text-sm text-zinc-500 font-bold tracking-widest border-b-2 border-zinc-300 pb-0.5">
-                    {template.polygons.filter(p => images[p.id]).length}/{template.polygons.length}
-                  </span>
-                </div>
-              )}
+                  </div>
 
-              {/* 投稿ボタン（全枠撮影済みの場合のみ表示） */}
-              {allFilled && (
-                <section className="mt-2">
-                  <button
-                    type="button"
-                    onClick={submit}
-                    disabled={submitting}
-                    className="w-full py-4 rounded-sm bg-zinc-800 text-white font-bold shadow-[4px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-1 active:shadow-none transition-all disabled:bg-zinc-400 disabled:shadow-none disabled:cursor-not-allowed border-2 border-zinc-900"
-                    style={{ transform: "rotate(-1deg)" }}
-                  >
-                    {submitting ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        投稿中...
-                      </span>
-                    ) : "🎉 作品をモニターに送る"}
-                  </button>
+                  {/* 進捗インジケーター */}
+                  <div className="shrink-0 flex items-center justify-center gap-2">
+                    {template.polygons.map((p, i) => (
+                      <div
+                        key={p.id}
+                        className={`w-2.5 h-2.5 rounded-full transition-all duration-200 border-2 ${
+                          images[p.id] ? "scale-100 border-transparent" : "scale-75 border-zinc-300 bg-transparent"
+                        }`}
+                        style={{
+                          backgroundColor: images[p.id]
+                            ? SLOT_COLORS[i % SLOT_COLORS.length]
+                            : "transparent",
+                          transform: images[p.id] ? `rotate(${Math.random() * 20 - 10}deg)` : "none",
+                        }}
+                      />
+                    ))}
+                    <span className="ml-2 text-xs text-zinc-500 font-bold tracking-widest">
+                      {template.polygons.filter(p => images[p.id]).length}/{template.polygons.length}
+                    </span>
+                  </div>
                 </section>
               )}
 
-              {errorMessage && (
-                <p className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-100 animate-pulse">
-                  ⚠️ {errorMessage}
-                </p>
-              )}
+              {/* お題・撮影ボタン・投稿ボタンを下部の1か所にまとめる */}
+              <CapturePanel
+                mode={panelMode}
+                theme={selectedTheme}
+                slotColor={selectedSlotColor}
+                buttonTextColor={getContrastColor(selectedSlotColor)}
+                hasImage={hasImageInSelected}
+                lockMessage={presetId && selectedSlotIndex >= 0 ? getSlotLockMessage(presetId, selectedSlotIndex) : null}
+                submitting={submitting}
+                errorMessage={errorMessage}
+                onOpenCamera={() => setIsCameraOpen(true)}
+                onSubmit={submit}
+              />
             </>
           )}
         </>
@@ -432,42 +377,6 @@ export default function Home() {
             </div>
           )}
         </section>
-      )}
-
-      {/* 下部固定カメラボタン/ロック表示 — 枠選択中かつ作成タブかつ未投稿時のみ表示 */}
-      {activeTab === "create" && !result && selectedSlotId && template && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 animate-bar-slide-up pb-5">
-          <div className="mx-auto max-w-md px-4 pt-3 flex justify-center">
-            {isLocked ? (
-              <div 
-                className="w-[90%] py-4 px-4 rounded-sm text-center text-xs font-bold shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] border-2 border-dashed border-zinc-500 bg-zinc-100 flex flex-col items-center justify-center gap-1"
-                style={{ transform: "rotate(1deg)" }}
-              >
-                <span className="text-sm flex items-center gap-1 text-zinc-800">
-                  <span>🔒</span> ロック中
-                </span>
-                <span className="text-[11px] text-zinc-500 font-bold leading-normal">
-                  {presetId && selectedSlotIndex >= 0 && getSlotLockMessage(presetId, selectedSlotIndex) 
-                    ? getSlotLockMessage(presetId, selectedSlotIndex) 
-                    : "この枠を撮影するには、QRコードをスキャンしてください！"}
-                </span>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsCameraOpen(true)}
-                className="w-[90%] h-14 font-bold text-sm shadow-[2px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-black"
-                style={{ 
-                  backgroundColor: selectedSlotColor, 
-                  color: getContrastColor(selectedSlotColor),
-                  transform: "rotate(1deg)" 
-                }}
-              >
-                <span className="text-xl">📸</span>
-                <span className="tracking-widest">{hasImageInSelected ? "撮り直す" : "カメラを起動して撮影"}</span>
-              </button>
-            )}
-          </div>
-        </div>
       )}
 
       {/* アプリ内カメラオーバーレイ */}
