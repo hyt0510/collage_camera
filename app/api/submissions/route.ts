@@ -1,21 +1,24 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
-import { db } from "@/lib/firebase-admin";
+import { requireAdmin } from "@/lib/admin-auth";
 import { moderateImage } from "@/lib/moderation";
+import { parseSubmissionBody } from "@/lib/submission-validation";
 import {
   createSubmission,
   listAllSubmissions,
   listApprovedSubmissions,
+  releaseSubmissionQuota,
+  reserveSubmissionQuota,
+  SubmissionLimitError,
+  withAdminImageUrls,
   type ModerationResult,
   type ModerationStatus,
 } from "@/lib/submission-store";
 
-function decideStatus(results: ModerationResult[]): ModerationStatus {
-  // 不適切な内容が1つでもあれば非表示
-  if (results.some((result) => result.safe === false)) return "hidden_auto";
-  
-  // すべてが safe: true であるか、もしくは判定がスキップ(safe: null)されている場合は「承認済み」とする
-  // これにより、APIキー未設定時でもモニターに表示されるようになる
+function decideStatus(result: ModerationResult): ModerationStatus {
+  if (result.safe === false) return "hidden_auto";
+  // 検閲APIの失敗・未設定で判定できなかった投稿は、運営が確認するまで表示しない
+  if (result.safe === null) return "pending_manual";
   return "approved";
 }
 
@@ -63,8 +66,12 @@ export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope");
     if (scope === "all") {
+      // 非表示の投稿も含むため管理者のみ
+      const denied = requireAdmin(request);
+      if (denied) return denied;
+
       // 管理用画面はリアルタイム性を優先するためキャッシュしない
-      const submissions = await listAllSubmissions();
+      const submissions = await withAdminImageUrls(await listAllSubmissions());
       const serialized = submissions.map((submission) => ({
         ...submission,
         items: submission.items.map((item) => ({
@@ -109,7 +116,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ submissions: cachedApprovedSubmissions });
   } catch (e: any) {
     console.error("GET /api/submissions error:", e);
-    return NextResponse.json({ error: "Fetch failed", details: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Fetch failed" }, { status: 500 });
   }
 }
 
@@ -134,70 +141,82 @@ export async function POST(request: Request) {
   }
   const userId = authResult.uid;
 
-  // 1. Firestore接続テスト
+  let raw: unknown;
   try {
-    await db.collection("_test").limit(1).get();
-  } catch (error: any) {
-    console.error("Firestore connectivity check FAILED:", error.message);
-    if (error.message.includes("NOT_FOUND") || error.message.includes("database")) {
-      return NextResponse.json({ 
-        error: "【解決策】Firebaseコンソールで 'Firestore Database' を開き、'データベースの作成' ボタンを完了させてください。プロジェクトIDが間違っている可能性もあります。",
-        projectId: process.env.FIREBASE_PROJECT_ID
-      }, { status: 500 });
-    }
-  }
-
-  let body: any;
-  try {
-    body = await request.json();
-  } catch (error) {
+    raw = await request.json();
+  } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  // 2. 検閲 (APIキーが死んでいてもエラーにしない)
-  // 個別画像のみ検閲対象とする
-  const moderationResults = await Promise.all(
-    body.items.map((item: any) => moderateImage(item.dataUrl))
-  );
+  const body = parseSubmissionBody(raw);
+  if (!body) {
+    return NextResponse.json(
+      { error: "投稿データが正しくありません。ページを再読み込みしてやり直してください。" },
+      { status: 400 },
+    );
+  }
 
-  // 3. 保存
+  // 2. 投稿回数の制限（検閲や画像保存より先に確認して、荒らしによる消費を防ぐ）
   try {
-    const status = decideStatus(moderationResults);
+    await reserveSubmissionQuota(userId);
+  } catch (error) {
+    if (error instanceof SubmissionLimitError) {
+      const message = error.reason === "limit"
+        ? "投稿できる回数の上限に達しました。参加ありがとうございました！"
+        : "少し時間をあけてから、もう一度投稿してください。";
+      return NextResponse.json({ error: message }, { status: 429 });
+    }
+    console.error("Quota check error:", error);
+    return NextResponse.json(
+      { error: "投稿に失敗しました。時間をおいてもう一度お試しください。" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    // 3. 検閲（モニターに実際に表示されるコラージュ画像が対象。APIが失敗しても止めない）
+    const moderation = await moderateImage(body.collage.buffer);
+    const status = decideStatus(moderation);
+
+    // 4. 保存
     const submission = await createSubmission({
       userId,
       templateId: body.templateId,
       presetId: body.presetId,
       status,
-      collageDataUrl: body.collageDataUrl,
-      items: body.items.map((item: any, index: number) => ({
-        ...item,
-        moderation: moderationResults[index],
-      })),
+      moderation,
+      collage: body.collage,
+      items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })),
     });
 
     // 新着投稿があったフラグを立てる (次回GET時にスロットリング付きで反映)
-    hasNewSubmissions = true;
+    if (status === "approved") hasNewSubmissions = true;
 
     return NextResponse.json({
       id: submission.id,
       placementLabel: submission.placement.label,
       status: submission.status,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Submission error:", error);
-    if (error.message === "ALREADY_SUBMITTED") {
-      return NextResponse.json({ error: "既に参加済みです。お一人様1回までとなります。" }, { status: 429 });
-    }
-    return NextResponse.json({ error: `保存に失敗: ${error.message}` }, { status: 500 });
+    await releaseSubmissionQuota(userId);
+    return NextResponse.json(
+      { error: "保存に失敗しました。時間をおいてもう一度お試しください。" },
+      { status: 500 },
+    );
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   const { deleteAllSubmissions } = await import("@/lib/submission-store");
   try {
     const count = await deleteAllSubmissions();
     return NextResponse.json({ success: true, count });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    console.error("DELETE /api/submissions error:", e);
+    return NextResponse.json({ error: "一括削除に失敗しました。" }, { status: 500 });
   }
 }

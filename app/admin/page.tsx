@@ -10,10 +10,11 @@ type Submission = {
   redeemed: boolean;
   placement: { label: string };
   collageDataUrl?: string;
+  moderation?: { source: string; reason: string; safe: boolean | null };
   items: Array<{
     theme: string;
-    dataUrl: string;
-    moderation: { source: string; reason: string; safe: boolean | null };
+    dataUrl?: string;
+    moderation?: { source: string; reason: string; safe: boolean | null };
   }>;
 };
 
@@ -46,6 +47,8 @@ export default function AdminPage() {
   const [activePreset, setActivePreset] = useState<ActivePreset | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [error, setError] = useState("");
+  // 取得に失敗したときは件数を「0件」と誤表示しない
+  const [submissionsFailed, setSubmissionsFailed] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -60,24 +63,27 @@ export default function AdminPage() {
         | { presets: PresetSummary[]; activePreset: ActivePreset }
         | { error: string };
 
-      if (
-        !submissionsResponse.ok ||
-        !presetsResponse.ok ||
-        !("submissions" in submissionsPayload) ||
-        !("presets" in presetsPayload)
-      ) {
-        setError("投稿一覧の取得に失敗しました。");
-        return;
+      // 片方が失敗しても、取得できた方は画面に反映する
+      const errors: string[] = [];
+      if (submissionsResponse.ok && "submissions" in submissionsPayload) {
+        setSubmissions(submissionsPayload.submissions);
+        setSubmissionsFailed(false);
+      } else {
+        errors.push("投稿一覧の取得に失敗しました。");
+        setSubmissionsFailed(true);
       }
-
-      setError("");
-      setSubmissions(submissionsPayload.submissions);
-      setPresets(presetsPayload.presets);
-      setActivePreset(presetsPayload.activePreset);
-      setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
+      if (presetsResponse.ok && "presets" in presetsPayload) {
+        setPresets(presetsPayload.presets);
+        setActivePreset(presetsPayload.activePreset);
+        setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
+      } else {
+        errors.push("プリセットの取得に失敗しました。");
+      }
+      setError(errors.join(" "));
     } catch (err) {
       console.error("Admin refresh error:", err);
       setError("ネットワークエラーまたはサーバーエラーが発生しました。");
+      setSubmissionsFailed(true);
     }
   }, []);
 
@@ -170,7 +176,14 @@ export default function AdminPage() {
         <div>
           <h1 className="text-xl font-bold text-zinc-900">運営管理画面</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            手動審査待ち: <span className="font-semibold">{pendingCount}</span> 件
+            手動審査待ち:{" "}
+            {submissionsFailed ? (
+              <span className="font-semibold">—</span>
+            ) : (
+              <>
+                <span className="font-semibold">{pendingCount}</span> 件
+              </>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -227,7 +240,7 @@ export default function AdminPage() {
         {submissions.map((submission, index) => {
           const previewUrl = submission.collageDataUrl || submission.items?.[0]?.dataUrl;
           const previewTheme = submission.items?.[0]?.theme;
-          const moderation = submission.items?.[0]?.moderation;
+          const moderation = submission.moderation ?? submission.items?.[0]?.moderation;
           return (
             <article
               key={submission.id || `sub-${index}`}

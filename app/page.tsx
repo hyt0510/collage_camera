@@ -265,6 +265,11 @@ export default function Home() {
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
                 投稿完了！
               </h2>
+              {result.status === "pending_manual" && (
+                <p className="mt-2 text-xs text-indigo-700">
+                  運営スタッフが確認したあと、モニターに表示されます。
+                </p>
+              )}
               
               {collageDataUrl && (
                 <div className="mt-4 relative group">
