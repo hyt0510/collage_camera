@@ -29,17 +29,27 @@ export async function submitCollageData(data: {
   collageDataUrl?: string;
   items: Array<{ polygonId: string; theme: string; dataUrl: string }>;
 }, idToken: string) {
-  const response = await fetch("/api/submissions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(data),
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/submissions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(data),
+    });
+  } catch {
+    throw new Error("通信に失敗しました。電波の良い場所で、もう一度お試しください。");
+  }
 
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "投稿に失敗しました。");
+  // サーバーの上限超過などで JSON 以外が返ってきても、分かる言葉で伝える
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (response.status === 413) throw new Error("画像が大きすぎて送れませんでした。撮り直してお試しください。");
+    throw new Error(payload?.error || "投稿に失敗しました。もう一度お試しください。");
+  }
+  if (!payload) throw new Error("投稿に失敗しました。もう一度お試しください。");
 
   return payload as SubmissionResult;
 }

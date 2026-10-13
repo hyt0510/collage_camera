@@ -1,6 +1,8 @@
 import "server-only";
+import { FieldValue } from "firebase-admin/firestore";
 import { db, bucket } from "./firebase-admin";
 import { generateCollageMosaicPlacements } from "./utils/mosaic";
+import type { DecodedImage } from "./submission-validation";
 
 export type ModerationStatus =
   | "approved"
@@ -16,14 +18,14 @@ export type ModerationResult = {
 export type SubmissionItemInput = {
   polygonId: string;
   theme: string;
-  dataUrl: string;
 };
 
 export type SubmissionItem = {
   polygonId: string;
   theme: string;
   imageUrl?: string;
-  moderation: ModerationResult;
+  // 旧データ用。現在は投稿全体の moderation に記録する
+  moderation?: ModerationResult;
 };
 
 export type Placement = {
@@ -43,51 +45,107 @@ export type Submission = {
   placement: Placement;
   items: SubmissionItem[];
   collageImageUrl?: string;
+  // コラージュ画像の検閲結果（旧データには無い）
+  moderation?: ModerationResult;
 };
+
+// 1人(匿名認証のUID)あたりの投稿上限と、連続投稿の最短間隔
+// 運用に合わせてここを変える
+export const MAX_SUBMISSIONS_PER_USER = 10;
+export const MIN_SUBMISSION_INTERVAL_MS = 30_000;
+
+const QUOTA_COLLECTION = "submission_quotas";
+
+export class SubmissionLimitError extends Error {
+  constructor(public readonly reason: "limit" | "too_soon") {
+    super(`SUBMISSION_LIMIT_${reason.toUpperCase()}`);
+  }
+}
 
 // モザイク用の座標プールを生成
 const MOSAIC_PLACEMENTS = generateCollageMosaicPlacements();
 
-async function uploadBase64Image(dataUrl: string, path: string): Promise<string> {
-  const base64Data = dataUrl.split(";base64,").pop();
-  if (!base64Data) throw new Error("Invalid base64 data");
-  
-  const buffer = Buffer.from(base64Data, "base64");
+// 管理画面で非公開画像を見せるための期限付きURLの有効期間
+const ADMIN_IMAGE_URL_TTL_MS = 15 * 60 * 1000;
+
+function storagePathFromUrl(url?: string): string | null {
+  if (!url) return null;
+  const prefix = `https://storage.googleapis.com/${bucket.name}/`;
+  return url.startsWith(prefix) ? url.slice(prefix.length) : null;
+}
+
+function imageUrlsOf(submission: Submission): string[] {
+  return [submission.collageImageUrl, ...submission.items.map((item) => item.imageUrl)]
+    .filter((url): url is string => !!url);
+}
+
+// 承認済みの画像だけを公開し、それ以外はURLを知っていても見られないようにする
+async function setImagesPublic(submission: Submission, isPublic: boolean): Promise<void> {
+  await Promise.all(imageUrlsOf(submission).map(async (url) => {
+    const path = storagePathFromUrl(url);
+    if (!path) return;
+    const file = bucket.file(path);
+    await (isPublic ? file.makePublic() : file.makePrivate());
+  }));
+}
+
+async function uploadImage(image: DecodedImage, path: string, isPublic: boolean): Promise<string> {
   const file = bucket.file(path);
 
-  // WebP形式として保存
-  await file.save(buffer, {
-    metadata: { contentType: "image/webp" },
-    public: true,
+  // 中身から判定した実際の形式で保存する
+  await file.save(image.buffer, {
+    metadata: { contentType: image.contentType },
+    public: isPublic,
   });
 
   return `https://storage.googleapis.com/${bucket.name}/${path}`;
 }
 
+/**
+ * 投稿枠を1つ確保する。上限超過や連続投稿なら SubmissionLimitError を投げる
+ * 検閲や画像保存の前に呼び、荒らしによる課金APIやStorageの消費を防ぐ
+ */
+export async function reserveSubmissionQuota(userId: string): Promise<void> {
+  const ref = db.collection(QUOTA_COLLECTION).doc(userId);
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const count = (snapshot.get("count") as number | undefined) ?? 0;
+    const lastAt = (snapshot.get("lastAt") as number | undefined) ?? 0;
+    const now = Date.now();
+
+    if (count >= MAX_SUBMISSIONS_PER_USER) throw new SubmissionLimitError("limit");
+    if (now - lastAt < MIN_SUBMISSION_INTERVAL_MS) throw new SubmissionLimitError("too_soon");
+
+    tx.set(ref, { count: count + 1, lastAt: now }, { merge: true });
+  });
+}
+
+/**
+ * 保存に失敗した投稿の枠を返す（連続投稿の間隔はそのまま残す）
+ */
+export async function releaseSubmissionQuota(userId: string): Promise<void> {
+  try {
+    await db.collection(QUOTA_COLLECTION).doc(userId).update({ count: FieldValue.increment(-1) });
+  } catch (e) {
+    console.warn("Failed to release submission quota:", e);
+  }
+}
+
 export async function createSubmission(input: {
   userId: string;
   templateId: string;
-  presetId?: string;
+  presetId: string;
   status: ModerationStatus;
-  collageDataUrl?: string;
-  items: Array<SubmissionItemInput & { moderation: ModerationResult }>;
+  moderation: ModerationResult;
+  collage: DecodedImage;
+  items: SubmissionItemInput[];
 }): Promise<Submission> {
 
   // 1. 画像アップロード
-  let items: SubmissionItem[];
-  let collageImageUrl: string | undefined;
-
+  let collageImageUrl: string;
   try {
-    items = input.items.map((item) => ({
-      polygonId: item.polygonId,
-      theme: item.theme,
-      moderation: item.moderation,
-    }));
-
-    if (input.collageDataUrl) {
-      const collagePath = `submissions/${Date.now()}_${input.userId}_collage.webp`;
-      collageImageUrl = await uploadBase64Image(input.collageDataUrl, collagePath);
-    }
+    const collagePath = `submissions/${Date.now()}_${input.userId}_collage.${input.collage.extension}`;
+    collageImageUrl = await uploadImage(input.collage, collagePath, input.status === "approved");
   } catch (e: any) {
     console.error("Step 1 FAILED (Storage):", e.message);
     throw new Error(`Storage Error: ${e.message}`);
@@ -109,8 +167,9 @@ export async function createSubmission(input: {
     status: input.status,
     redeemed: false,
     placement,
-    items,
+    items: input.items.map((item) => ({ polygonId: item.polygonId, theme: item.theme })),
     collageImageUrl,
+    moderation: input.moderation,
   };
 
   // 3. Firestore保存
@@ -138,17 +197,43 @@ export async function listApprovedSubmissions(): Promise<Submission[]> {
   }
 }
 
+// 取得に失敗したら空配列にせず投げる。管理画面で「投稿0件」と「DB障害」を見分けるため
 export async function listAllSubmissions(): Promise<Submission[]> {
-  try {
-    const snapshot = await db.collection("submissions")
-      .orderBy("createdAt", "desc")
-      .limit(500)
-      .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
-  } catch (e: any) {
-    console.error("Firestore list(all) error:", e);
-    return [];
-  }
+  const snapshot = await db.collection("submissions")
+    .orderBy("createdAt", "desc")
+    .limit(500)
+    .get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
+}
+
+/**
+ * 管理画面用。非公開の画像は期限付きURLに差し替えて、運営だけが確認できるようにする
+ */
+export async function withAdminImageUrls(submissions: Submission[]): Promise<Submission[]> {
+  const expires = Date.now() + ADMIN_IMAGE_URL_TTL_MS;
+  const sign = async (url?: string) => {
+    const path = storagePathFromUrl(url);
+    if (!path) return url;
+    try {
+      const [signed] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires });
+      return signed as string;
+    } catch (e) {
+      console.warn(`Signed URL failed for ${path}:`, e);
+      return url;
+    }
+  };
+
+  return Promise.all(submissions.map(async (submission) => {
+    if (submission.status === "approved") return submission;
+    return {
+      ...submission,
+      collageImageUrl: await sign(submission.collageImageUrl),
+      items: await Promise.all(submission.items.map(async (item) => ({
+        ...item,
+        imageUrl: await sign(item.imageUrl),
+      }))),
+    };
+  }));
 }
 
 export async function updateSubmissionStatus(
@@ -160,9 +245,22 @@ export async function updateSubmissionStatus(
   if (!doc.exists) {
     return null;
   }
+  const submission = { id: doc.id, ...doc.data() } as Submission;
 
-  if (action === "approve") await ref.update({ status: "approved" });
-  if (action === "hide") await ref.update({ status: "hidden_manual" });
+  if (action === "approve") {
+    // モニターが非公開のURLを読みに行かないよう、先に公開してから承認する
+    await setImagesPublic(submission, true);
+    await ref.update({ status: "approved" });
+  }
+  if (action === "hide") {
+    // モニターから外すのを優先し、画像の非公開化はその後に行う
+    await ref.update({ status: "hidden_manual" });
+    try {
+      await setImagesPublic(submission, false);
+    } catch (e) {
+      console.error(`Failed to make images private for ${id}:`, e);
+    }
+  }
   if (action === "redeem") await ref.update({ redeemed: true });
 
   const updated = await ref.get();
@@ -176,28 +274,19 @@ export async function deleteSubmission(id: string): Promise<boolean> {
 
   const submission = doc.data() as Submission;
 
-  const deleteImage = async (url?: string) => {
-    if (!url) return;
-    try {
-      const prefix = `https://storage.googleapis.com/${bucket.name}/`;
-      if (url.startsWith(prefix)) {
-        const path = url.replace(prefix, "");
-        await bucket.file(path).delete().catch((e: any) => console.warn(`Storage delete failed for ${path}:`, e.message));
-      }
-    } catch (e: any) {
-      console.warn("Image deletion skip:", e);
-    }
-  };
-
-  await Promise.all([
-    ...submission.items.map(item => deleteImage(item.imageUrl)),
-    deleteImage(submission.collageImageUrl)
-  ]);
+  await Promise.all(imageUrlsOf(submission).map(async (url) => {
+    const path = storagePathFromUrl(url);
+    if (!path) return;
+    await bucket.file(path).delete().catch((e: any) => console.warn(`Storage delete failed for ${path}:`, e.message));
+  }));
 
   await ref.delete();
   return true;
 }
 
+/**
+ * 全投稿を削除する。イベントのリセットを兼ねるため、投稿回数の記録も消す
+ */
 export async function deleteAllSubmissions(): Promise<number> {
   const snapshot = await db.collection("submissions").get();
   let count = 0;
@@ -205,5 +294,13 @@ export async function deleteAllSubmissions(): Promise<number> {
     await deleteSubmission(doc.id);
     count++;
   }
+
+  const quotas = await db.collection(QUOTA_COLLECTION).get();
+  for (let i = 0; i < quotas.docs.length; i += 400) {
+    const batch = db.batch();
+    quotas.docs.slice(i, i + 400).forEach((quota) => batch.delete(quota.ref));
+    await batch.commit();
+  }
+
   return count;
 }

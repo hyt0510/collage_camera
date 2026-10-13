@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { requireAdmin } from "@/lib/admin-auth";
 import { updateSubmissionStatus } from "@/lib/submission-store";
+import { isValidId } from "@/lib/submission-validation";
 
 type Action = "approve" | "hide" | "redeem";
 
@@ -12,7 +14,13 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   const { id } = await context.params;
+  if (!isValidId(id)) {
+    return NextResponse.json({ error: "対象投稿が見つかりません。" }, { status: 404 });
+  }
 
   let raw: unknown;
   try {
@@ -47,7 +55,13 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   const { id } = await context.params;
+  if (!isValidId(id)) {
+    return NextResponse.json({ error: "対象投稿が見つかりません。" }, { status: 404 });
+  }
   const { deleteSubmission } = await import("@/lib/submission-store");
   
   const success = await deleteSubmission(id);

@@ -5,11 +5,55 @@ import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
 
-const IMAGES_KEY = "collage_v10_img";
-const PRESET_KEY = "collage_v10_preset";
+export const IMAGES_KEY = "collage_v10_img";
+export const PRESET_KEY = "collage_v10_preset";
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
 const HISTORY_KEY = "collage_v10_history";
 const UNLOCKED_QRS_KEY = "collage_v10_unlocked_qrs";
+
+type PresetSnapshot = {
+  id: string;
+  templateId: string;
+  templateName: string;
+  polygons: FrameTemplate["polygons"];
+  themeMap: Record<string, string>;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+// 古いバージョンや途中で壊れた保存データで画面が真っ白にならないよう、復元前に形を確かめる
+function isPresetSnapshot(value: unknown): value is PresetSnapshot {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.templateId === "string"
+    && typeof value.templateName === "string"
+    && Array.isArray(value.polygons)
+    && value.polygons.length > 0
+    && value.polygons.every((p) => isRecord(p) && typeof p.id === "string" && typeof p.clipPath === "string")
+    && isRecord(value.themeMap)
+    && Object.values(value.themeMap).every((theme) => typeof theme === "string");
+}
+
+function isImageMap(value: unknown): value is Record<string, string> {
+  return isRecord(value)
+    && Object.values(value).every((v) => typeof v === "string" && v.startsWith("data:image/"));
+}
+
+function isHistory(value: unknown): value is CollageHistoryItem[] {
+  return Array.isArray(value) && value.every((item) =>
+    isRecord(item) && typeof item.id === "string" && typeof item.dataUrl === "string"
+    && typeof item.createdAt === "string");
+}
+
+function parseJson(text: string | null): unknown {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 export interface CollageHistoryItem {
   id: string;
@@ -37,6 +81,8 @@ export function useCollageCapture(user: User | null) {
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
   const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
   const isUnlockedQRsInitialized = useRef(false);
+  // 連打で二重投稿しないよう、state の反映を待たずに止める
+  const submittingRef = useRef(false);
 
   const pushLog = useCallback((_msg: string) => {}, []);
 
@@ -129,16 +175,19 @@ export function useCollageCapture(user: User | null) {
     const handleFocus = () => {
       void syncPreset();
     };
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("visibilitychange", () => {
+    // 登録した関数を外せるよう名前を付ける（無名関数だと撮影のたびにリスナーが増え続ける）
+    const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         void syncPreset();
       }
-    });
+    };
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [syncPreset]);
 
@@ -146,75 +195,54 @@ export function useCollageCapture(user: User | null) {
     try {
       pushLog("--- Collage App Mounted ---");
 
-      const savedCount = localStorage.getItem(SUBMISSION_COUNT_KEY);
-      if (savedCount) setSubmissionCount(parseInt(savedCount, 10));
+      const savedCount = parseInt(localStorage.getItem(SUBMISSION_COUNT_KEY) ?? "", 10);
+      if (Number.isFinite(savedCount) && savedCount > 0) setSubmissionCount(savedCount);
 
-      const savedUnlocked = localStorage.getItem(UNLOCKED_QRS_KEY);
-      if (savedUnlocked) {
-        try {
-          setUnlockedQRs(JSON.parse(savedUnlocked));
-        } catch (e) {
-          pushLog("Unlocked QRs restoration failed");
-        }
+      const savedUnlocked = parseJson(localStorage.getItem(UNLOCKED_QRS_KEY));
+      if (Array.isArray(savedUnlocked) && savedUnlocked.every((id) => typeof id === "string")) {
+        setUnlockedQRs(savedUnlocked);
+      } else if (savedUnlocked !== null) {
+        pushLog("Unlocked QRs restoration failed");
       }
       isUnlockedQRsInitialized.current = true;
 
       loadHistoryFromDB().then(parsed => {
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (isHistory(parsed) && parsed.length > 0) {
           setCollageHistory(parsed.slice(0, 5));
         } else {
           // 移行用: IndexedDBになければlocalStorageから読み込む
-          const savedHistory = localStorage.getItem(HISTORY_KEY);
-          if (savedHistory) {
-            try {
-              const oldParsed = JSON.parse(savedHistory);
-              if (Array.isArray(oldParsed)) {
-                setCollageHistory(oldParsed.slice(0, 5));
-                // IndexedDBへ移行保存
-                void saveHistoryToDB(oldParsed.slice(0, 5));
-              }
-            } catch (e) {
-              pushLog("History restoration failed");
-            }
+          const oldParsed = parseJson(localStorage.getItem(HISTORY_KEY));
+          if (isHistory(oldParsed)) {
+            setCollageHistory(oldParsed.slice(0, 5));
+            // IndexedDBへ移行保存
+            void saveHistoryToDB(oldParsed.slice(0, 5));
+          } else if (oldParsed !== null) {
+            pushLog("History restoration failed");
           }
         }
-      });
+      }).catch(e => pushLog(`History load error: ${String(e)}`));
 
-      loadHistoryFromDB().then(parsed => {
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCollageHistory(parsed.slice(0, 5));
-        } else {
-          // 移行用: IndexedDBになければlocalStorageから読み込む
-          const savedHistory = localStorage.getItem(HISTORY_KEY);
-          if (savedHistory) {
-            try {
-              const oldParsed = JSON.parse(savedHistory);
-              if (Array.isArray(oldParsed)) {
-                setCollageHistory(oldParsed.slice(0, 5));
-                // IndexedDBへ移行保存
-                void saveHistoryToDB(oldParsed.slice(0, 5));
-              }
-            } catch (e) {
-              pushLog("History restoration failed");
-            }
-          }
-        }
-      });
+      const parsedImages = parseJson(localStorage.getItem(IMAGES_KEY));
+      const preset = parseJson(localStorage.getItem(PRESET_KEY));
 
-      const savedImages = localStorage.getItem(IMAGES_KEY);
-      const savedPreset = localStorage.getItem(PRESET_KEY);
-      
-      if (savedImages && savedPreset) {
-        try {
-          const parsedImages = JSON.parse(savedImages);
-          const preset = JSON.parse(savedPreset);
-          setImages(parsedImages);
-          setPresetId(preset.id);
-          setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
-          setThemeMap(preset.themeMap);
-          pushLog(`Resuming: ${Object.keys(parsedImages).length} photos`);
-        } catch (e) { pushLog("Restoration failed"); }
+      if (isImageMap(parsedImages) && isPresetSnapshot(preset)) {
+        // 今の枠に存在しない枠の写真は捨てる
+        const slotIds = new Set(preset.polygons.map((p) => p.id));
+        const restoredImages = Object.fromEntries(
+          Object.entries(parsedImages).filter(([id]) => slotIds.has(id)),
+        );
+        setImages(restoredImages);
+        setPresetId(preset.id);
+        setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
+        setThemeMap(preset.themeMap);
+        pushLog(`Resuming: ${Object.keys(restoredImages).length} photos`);
       } else {
+        if (parsedImages !== null || preset !== null) {
+          // 壊れた保存データは捨てて、最新のプリセットから始め直す
+          localStorage.removeItem(IMAGES_KEY);
+          localStorage.removeItem(PRESET_KEY);
+          pushLog("Restoration failed: saved data was invalid");
+        }
         // マウント時の初期同期
         fetchAssignedPreset().then(preset => {
           if (preset) {
@@ -256,7 +284,8 @@ export function useCollageCapture(user: User | null) {
   };
 
   const submit = async () => {
-    if (!template || !presetId || !user) return;
+    if (!template || !presetId || !user || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setErrorMessage("");
     try {
@@ -304,8 +333,9 @@ export function useCollageCapture(user: User | null) {
 
     } catch (e: any) { 
       pushLog(`Submit failed: ${String(e)}`);
-      setErrorMessage(`${e}`); 
+      setErrorMessage(e instanceof Error ? e.message : "投稿に失敗しました。もう一度お試しください。");
     } finally { 
+      submittingRef.current = false;
       setSubmitting(false); 
     }
   };

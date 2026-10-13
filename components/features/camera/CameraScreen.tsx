@@ -120,13 +120,15 @@ export function CameraScreen({
     const videoTrack = streamRef.current.getVideoTracks()[0];
     if (!videoTrack) return;
 
-    const settings = videoTrack.getSettings();
-    const width = settings.width || 1920;
-    const height = settings.height || 1080;
-
     // video要素を取得してキャプチャ
     const video = document.querySelector("video");
-    if (!video) return;
+    // カメラの映像が届く前に押されると真っ黒な写真になるため、準備ができるまで無視する
+    if (!video || video.readyState < 2 || video.videoWidth === 0) return;
+
+    // 端末の向きで縦横が入れ替わるため、トラックの設定値ではなく実際の映像サイズを使う
+    const settings = videoTrack.getSettings();
+    const width = video.videoWidth || settings.width || 1920;
+    const height = video.videoHeight || settings.height || 1080;
 
     const canvas = document.createElement("canvas");
     canvas.width = width;

@@ -70,6 +70,27 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
   }
 }
 
+// 端末のメモリを使い切らないよう、元ファイルの大きさに上限を設ける
+const MAX_PHOTO_FILE_BYTES = 50 * 1024 * 1024;
+
+export const PHOTO_LOAD_ERROR_MESSAGE =
+  "この写真は読み込めませんでした。別の写真を選ぶか、カメラで撮影してください。";
+
+/**
+ * アルバムやOS標準カメラで選んだ写真を、投稿用の大きさに縮めて読み込む
+ * 読み込めないときは PHOTO_LOAD_ERROR_MESSAGE の Error を投げる
+ */
+export async function loadPhotoFile(file: File): Promise<string> {
+  if ((file.type && !file.type.startsWith("image/")) || file.size > MAX_PHOTO_FILE_BYTES) {
+    throw new Error(PHOTO_LOAD_ERROR_MESSAGE);
+  }
+  try {
+    return await compressImage(file, () => {});
+  } catch {
+    throw new Error(PHOTO_LOAD_ERROR_MESSAGE);
+  }
+}
+
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -168,6 +189,7 @@ export async function generateCollageImage(
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/webp", 0.8);
+  // iPhone の Safari は canvas から WebP を出力できず数MBの PNG になり、投稿上限を超えるため JPEG にする
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
