@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import { loadPhotoFile, PHOTO_LOAD_ERROR_MESSAGE } from "@/lib/utils/image";
 
 interface Props {
   onShutter: () => void;
@@ -26,40 +27,31 @@ export function CameraControls({
   slotColor,
 }: Props) {
   const albumInputRef = useRef<HTMLInputElement>(null);
+  const [albumError, setAlbumError] = useState<string | null>(null);
 
   const handleAlbumFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const url = URL.createObjectURL(file);
     try {
-      const img = new Image();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Timeout")), 10000);
-        img.onload = () => {
-          clearTimeout(timeout);
-          const MAX = 800;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { reject(new Error("Canvas failed")); return; }
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/jpeg", 0.7));
-        };
-        img.onerror = () => { clearTimeout(timeout); reject(new Error("Load failed")); };
-        img.src = url;
-      });
-      onAlbumSelect(dataUrl);
+      setAlbumError(null);
+      onAlbumSelect(await loadPhotoFile(file));
+    } catch (err) {
+      // 読み込めない写真を選んでも何も起きないと戸惑うため、理由を表示する
+      setAlbumError(err instanceof Error ? err.message : PHOTO_LOAD_ERROR_MESSAGE);
+      setTimeout(() => setAlbumError(null), 4000);
     } finally {
-      URL.revokeObjectURL(url);
       e.target.value = "";
     }
   };
 
   return (
     <div className="absolute bottom-0 left-0 right-0 pb-8 pt-6 px-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+      {albumError && (
+        <p className="mb-3 rounded-sm bg-white px-3 py-2 text-center text-xs font-bold text-rose-700 shadow">
+          {albumError}
+        </p>
+      )}
       {/* 上段: グリッドトグル */}
       <div className="flex justify-end mb-4">
         <button
