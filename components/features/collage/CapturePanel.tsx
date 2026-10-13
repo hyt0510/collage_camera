@@ -13,6 +13,7 @@ interface Props {
   errorMessage: string;
   onOpenCamera: () => void;
   onSubmit: () => void;
+  onScanQr: () => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export function CapturePanel({
   errorMessage,
   onOpenCamera,
   onSubmit,
+  onScanQr,
 }: Props) {
   const showTheme = mode === "capture" || mode === "locked" || mode === "retakeOrSubmit";
 
@@ -62,7 +64,7 @@ export function CapturePanel({
 
   return (
     <section
-      className="relative z-10 shrink-0 min-h-28 rounded-sm bg-white/95 px-4 py-3 border-2 shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex flex-col justify-center gap-2"
+      className="relative z-10 shrink-0 min-h-[126px] rounded-sm bg-white/95 px-4 py-3 border-2 shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex flex-col justify-center gap-1.5"
       style={{ borderColor: showTheme ? slotColor : "#d4d4d8" }}
     >
       {errorMessage && (
@@ -84,10 +86,21 @@ export function CapturePanel({
       {mode === "capture" && <div className="flex">{cameraButton}</div>}
 
       {mode === "locked" && (
-        // パネルの高さを他の状態とそろえるため、見出し行は付けず1ブロックにまとめる
-        <p className="rounded-sm border-2 border-dashed border-zinc-400 bg-zinc-100 px-3 py-2 text-center text-[11px] font-bold text-zinc-600 leading-snug">
-          🔒 {lockMessage ?? "この枠を撮影するには、QRコードをスキャンしてください！"}
-        </p>
+        // パネルの高さを他の状態とそろえるため、案内は枠なしの2行までにしてボタンと並べる
+        <>
+          <p className="text-[11px] font-bold text-zinc-600 leading-snug line-clamp-2">
+            🔒 {lockMessage ?? "この枠を撮影するには、QRコードをスキャンしてください！"}
+          </p>
+          <div className="flex">
+            <button
+              type="button"
+              onClick={onScanQr}
+              className="flex-1 h-9 bg-white text-zinc-800 text-sm font-bold border-2 border-zinc-800 shadow-[2px_3px_0_0_rgba(0,0,0,0.2)] active:translate-y-0.5 active:shadow-none transition-all"
+            >
+              📷 QRコードを読み取る
+            </button>
+          </div>
+        </>
       )}
 
       {mode === "submit" && (
