@@ -100,6 +100,18 @@ export function getSlotLockMessage(presetId: string, slotIndex: number): string 
   return preset?.lockMessages?.[String(slotIndex)] ?? null;
 }
 
+const DEFAULT_LOCK_MESSAGE = "この枠を撮影するには、QRコードをスキャンしてください！";
+
+/** まだ解除していないロック枠について、解除方法の案内文を枠の順に返す */
+export function getPendingLockMessages(presetId: string, unlockedQRs: string[]): string[] {
+  const preset = getPresetById(presetId);
+  if (!preset?.slotLocks) return [];
+  return Object.entries(preset.slotLocks)
+    .filter(([, lockId]) => !unlockedQRs.includes(lockId))
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([slotIndex]) => preset.lockMessages?.[slotIndex] ?? DEFAULT_LOCK_MESSAGE);
+}
+
 export function getUnlockMessageByLockId(lockId: string): string | null {
   for (const preset of CAPTURE_PRESETS) {
     if (preset.slotLocks) {

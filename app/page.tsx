@@ -6,7 +6,8 @@ import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
-import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById } from "@/lib/collage-config";
+import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById, getPendingLockMessages } from "@/lib/collage-config";
+import { findNextSlotId } from "@/lib/utils/slots";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -14,7 +15,7 @@ export default function Home() {
   const {
     template, themeMap, images, errorMessage,
     submitting, result, collageDataUrl, submissionCount, collageHistory,
-    unlockedQRs, setUnlockedQRs, presetId,
+    hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
@@ -35,6 +36,7 @@ export default function Home() {
   const totalSlots = template?.polygons.length ?? 0;
   const lockId = template && presetId && selectedSlotIndex >= 0 ? getSlotLockId(presetId, selectedSlotIndex) : null;
   const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
+  const pendingLockMessages = presetId ? getPendingLockMessages(presetId, unlockedQRs) : [];
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -205,7 +207,10 @@ export default function Home() {
             作成
           </button>
           <button
-            onClick={() => setActiveTab("history")}
+            onClick={() => {
+              setActiveTab("history");
+              markHistoryRead();
+            }}
             className={`flex-1 py-2 text-sm font-bold border-2 transition-all relative ${
               activeTab === "history" 
                 ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5" 
@@ -214,7 +219,7 @@ export default function Home() {
             style={{ borderRadius: "8px 2px 2px 2px" }}
           >
             履歴
-            {collageHistory.length > 0 && (
+            {hasUnreadHistory && (
               <span className="absolute top-1 right-2 w-2 h-2 bg-rose-500 rounded-full border border-rose-700"></span>
             )}
           </button>
@@ -303,6 +308,26 @@ export default function Home() {
             </section>
           ) : (
             <>
+              {/* まだ解除していないロック枠の案内（撮る順番は自由なので、先に一覧で伝える） */}
+              {pendingLockMessages.length > 0 && (
+                <section
+                  className="rounded-sm bg-white px-4 py-3 border-2 border-dashed border-zinc-400 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] relative z-10"
+                  style={{ transform: "rotate(0.5deg)" }}
+                >
+                  <p className="text-sm font-bold text-zinc-800">🔒 QRコードで開く枠があります</p>
+                  <p className="mt-0.5 text-[11px] font-bold text-zinc-500">
+                    撮る順番は自由です。ほかの枠から先に撮れます
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {pendingLockMessages.map((message) => (
+                      <li key={message} className="text-xs text-zinc-700 leading-relaxed">
+                        ・{message}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               {template && (
                 <section className="rounded-2xl bg-white p-3 shadow-sm border border-zinc-100 relative z-10">
                   <CollageFrame
@@ -456,6 +481,17 @@ export default function Home() {
           onCapture={(dataUrl) => {
             setImageDataUrl(selectedSlotId, dataUrl);
             setIsCameraOpen(false);
+            // 次の未撮影・未ロックの枠へ進む（ほかの枠はタップで選び直せる）。なければ選択を外して投稿ボタンを見せる
+            const nextSlotId = findNextSlotId(
+              template.polygons.map(p => p.id),
+              selectedSlotId,
+              (id) => {
+                const index = template.polygons.findIndex(p => p.id === id);
+                const slotLockId = presetId ? getSlotLockId(presetId, index) : null;
+                return !images[id] && !(slotLockId && !unlockedQRs.includes(slotLockId));
+              },
+            );
+            setSelectedSlotId(nextSlotId);
           }}
           onClose={() => setIsCameraOpen(false)}
         />
