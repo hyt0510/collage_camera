@@ -41,6 +41,22 @@ const statusLabels: Record<Submission["status"], string> = {
   hidden_manual: "手動非表示",
 };
 
+// 一覧の絞り込み。「非表示」は自動・手動をまとめる
+type StatusFilter = "all" | "pending_manual" | "approved" | "hidden";
+
+const statusFilters: Array<{ key: StatusFilter; label: string }> = [
+  { key: "all", label: "すべて" },
+  { key: "pending_manual", label: "手動確認待ち" },
+  { key: "approved", label: "表示中" },
+  { key: "hidden", label: "非表示" },
+];
+
+function matchesStatusFilter(status: Submission["status"], filter: StatusFilter) {
+  if (filter === "all") return true;
+  if (filter === "hidden") return status === "hidden_auto" || status === "hidden_manual";
+  return status === filter;
+}
+
 export default function AdminPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [presets, setPresets] = useState<PresetSummary[]>([]);
@@ -49,6 +65,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   // 取得に失敗したときは件数を「0件」と誤表示しない
   const [submissionsFailed, setSubmissionsFailed] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const refresh = useCallback(async () => {
     try {
@@ -148,9 +165,20 @@ export default function AdminPage() {
     await refresh();
   }
 
-  const pendingCount = useMemo(
-    () => submissions.filter((submission) => submission.status === "pending_manual").length,
+  const filterCounts = useMemo(
+    () => Object.fromEntries(
+      statusFilters.map(({ key }) => [
+        key,
+        submissions.filter((submission) => matchesStatusFilter(submission.status, key)).length,
+      ]),
+    ) as Record<StatusFilter, number>,
     [submissions],
+  );
+  const pendingCount = filterCounts.pending_manual;
+
+  const filteredSubmissions = useMemo(
+    () => submissions.filter((submission) => matchesStatusFilter(submission.status, statusFilter)),
+    [submissions, statusFilter],
   );
 
   async function resetClientState() {
@@ -236,8 +264,26 @@ export default function AdminPage() {
         </div>
       </section>
 
+      <nav className="mt-4 flex flex-wrap gap-2" aria-label="状態で絞り込む">
+        {statusFilters.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setStatusFilter(key)}
+            aria-pressed={statusFilter === key}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+              statusFilter === key
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-700 shadow-sm hover:bg-zinc-100"
+            }`}
+          >
+            {label} {submissionsFailed ? "—" : filterCounts[key]}
+          </button>
+        ))}
+      </nav>
+
       <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {submissions.map((submission, index) => {
+        {filteredSubmissions.map((submission, index) => {
           const previewUrl = submission.collageDataUrl || submission.items?.[0]?.dataUrl;
           const previewTheme = submission.items?.[0]?.theme;
           const moderation = submission.moderation ?? submission.items?.[0]?.moderation;

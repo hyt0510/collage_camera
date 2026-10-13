@@ -79,6 +79,8 @@ export function useCollageCapture(user: User | null) {
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
+  // 投稿してから履歴タブを開くまでの間だけ true（再読み込みで消えてよい）
+  const [hasUnreadHistory, setHasUnreadHistory] = useState(false);
   const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
   const isUnlockedQRsInitialized = useRef(false);
   // 連打で二重投稿しないよう、state の反映を待たずに止める
@@ -321,6 +323,7 @@ export function useCollageCapture(user: User | null) {
       };
       const newHistory = [historyItem, ...collageHistory].slice(0, 5);
       setCollageHistory(newHistory);
+      setHasUnreadHistory(true);
       
       // Base64画像は大きいため、localStorageの5MB制限を回避するためにIndexedDBに保存する
       void saveHistoryToDB(newHistory).then(() => {
@@ -340,10 +343,12 @@ export function useCollageCapture(user: User | null) {
     }
   };
 
+  const markHistoryRead = useCallback(() => setHasUnreadHistory(false), []);
+
   return { 
     template, themeMap, images, errorMessage, 
     submitting, result, collageDataUrl, submissionCount, 
-    collageHistory, unlockedQRs, setUnlockedQRs, presetId,
+    collageHistory, hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     handleFileChange, setImageDataUrl, submit, reset, pushLog 
   };
 }

@@ -7,12 +7,6 @@ const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
 const getContrastColor = (hex: string) => 
   (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
-/** テーマ文字列を枠内ラベル用に短縮する */
-function shortenTheme(theme: string, maxLen = 5): string {
-  if (theme.length <= maxLen) return theme;
-  return theme.slice(0, maxLen) + "…";
-}
-
 interface Props {
   template: FrameTemplate;
   images: Record<string, string>;
@@ -80,13 +74,15 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                 </div>
               )}
 
-              {/* 未撮影時のテーマ短縮ラベル / ロック表示 */}
+              {/* 未撮影時のテーマラベル / ロック表示 */}
               {!image && (
                 <span
                   className="pointer-events-none absolute flex flex-col items-center gap-1"
                   style={{
                     left: `${center.x}%`,
                     top: `${center.y}%`,
+                    // 枠からはみ出して切れないよう、ラベルの幅を枠の横幅の7割に収める
+                    width: `${box.width * 0.7}%`,
                     transform: `translate(-50%, -50%) rotate(${Math.random() * 6 - 3}deg)`,
                   }}
                 >
@@ -99,13 +95,14 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                     </span>
                   ) : (
                     <span
-                      className="masking-tape text-[10px] font-bold whitespace-nowrap opacity-90"
+                      className="masking-tape max-w-full text-[10px] font-bold opacity-90"
                       style={{ 
                         backgroundColor: color, 
                         color: getContrastColor(color) 
                       }}
                     >
-                      {shortenTheme(theme)}
+                      {/* 2行を超える分は「…」で省略する */}
+                      <span className="line-clamp-2 text-center leading-snug">{theme}</span>
                     </span>
                   )}
                 </span>
