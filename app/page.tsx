@@ -18,7 +18,7 @@ export default function Home() {
 
   const {
     template, themeMap, images, errorMessage,
-    submitting, result, collageDataUrl, submissionCount, collageHistory,
+    submitting, result, collageDataUrl, collageHistory,
     hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
@@ -209,11 +209,6 @@ export default function Home() {
 
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-zinc-900 tracking-wider">collage</h1>
-          {submissionCount > 0 && (
-            <div className="bg-zinc-800 text-white px-2 py-0.5 rounded-sm text-[10px] font-bold shadow-sm" style={{ transform: "rotate(2deg)" }}>
-              {submissionCount}回目
-            </div>
-          )}
         </div>
 
         {/* タブ切り替え（手書きノート風） */}
