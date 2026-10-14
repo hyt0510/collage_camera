@@ -8,9 +8,8 @@ import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { QrScannerScreen } from "@/components/features/camera/QrScannerScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
 import { CapturePanel } from "@/components/features/collage/CapturePanel";
-import { LockedSlotsChip } from "@/components/features/collage/LockedSlotsChip";
 import { getCapturePanelMode } from "@/lib/utils/capture-panel";
-import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById, getPendingLockMessages } from "@/lib/collage-config";
+import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById } from "@/lib/collage-config";
 import { findNextSlotId } from "@/lib/utils/slots";
 import { parseUnlockCode } from "@/lib/utils/qr";
 
@@ -42,7 +41,7 @@ export default function Home() {
   const totalSlots = template?.polygons.length ?? 0;
   const lockId = template && presetId && selectedSlotIndex >= 0 ? getSlotLockId(presetId, selectedSlotIndex) : null;
   const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
-  const pendingLockMessages = presetId ? getPendingLockMessages(presetId, unlockedQRs) : [];
+  const lockMessage = presetId && selectedSlotIndex >= 0 ? getSlotLockMessage(presetId, selectedSlotIndex) : null;
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -81,6 +80,10 @@ export default function Home() {
   const handleQrDetected = (text: string): string | null => {
     const code = parseUnlockCode(text);
     if (!code) return "このQRコードは使えません";
+    // 読み取りは選択中のロック枠から開くので、その枠の QR 以外では解除しない
+    if (lockId && code !== lockId) {
+      return `別のテーマのQRコードです。${lockMessage ?? "この枠のQRコードをスキャンしてください"}`;
+    }
     const outcome = applyUnlockCode(code);
     if (outcome === "invalid") return "このQRコードは現在のテーマでは使用できません";
     if (outcome === "already") {
@@ -297,9 +300,6 @@ export default function Home() {
             </section>
           ) : (
             <>
-              {/* まだ解除していないロック枠の案内（撮る順番は自由なので、先に伝える） */}
-              {pendingLockMessages.length > 0 && <LockedSlotsChip messages={pendingLockMessages} onScan={() => setIsScannerOpen(true)} />}
-
               {/* フレームは残った高さに合わせて縮む。小さい端末では 320px で止めてスクロールさせる */}
               {template && (
                 <section className="relative z-10 flex flex-1 min-h-[320px] flex-col items-center gap-1">
@@ -346,7 +346,7 @@ export default function Home() {
                 slotColor={selectedSlotColor}
                 buttonTextColor={getContrastColor(selectedSlotColor)}
                 hasImage={hasImageInSelected}
-                lockMessage={presetId && selectedSlotIndex >= 0 ? getSlotLockMessage(presetId, selectedSlotIndex) : null}
+                lockMessage={lockMessage}
                 submitting={submitting}
                 errorMessage={errorMessage}
                 onOpenCamera={() => setIsCameraOpen(true)}
