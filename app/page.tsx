@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
+import { QrScannerScreen } from "@/components/features/camera/QrScannerScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
 import { CapturePanel } from "@/components/features/collage/CapturePanel";
 import { LockedSlotsChip } from "@/components/features/collage/LockedSlotsChip";
 import { getCapturePanelMode } from "@/lib/utils/capture-panel";
 import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById, getPendingLockMessages } from "@/lib/collage-config";
 import { findNextSlotId } from "@/lib/utils/slots";
+import { parseUnlockCode } from "@/lib/utils/qr";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -25,6 +27,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // 選択中のテーマ情報
   const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
@@ -43,6 +46,51 @@ export default function Home() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // 解除コードを適用する（URL の ?unlock= と、アプリ内での QR 読み取りの両方から使う）
+  const applyUnlockCode = useCallback((unlockVal: string): "unlocked" | "already" | "invalid" => {
+    const preset = presetId ? getPresetById(presetId) : null;
+    const isValid = preset?.slotLocks ? Object.values(preset.slotLocks).includes(unlockVal) : false;
+    if (!isValid) return "invalid";
+    if (unlockedQRs.includes(unlockVal)) return "already";
+
+    setUnlockedQRs(prev => {
+      const next = [...prev];
+      if (!next.includes(unlockVal)) {
+        next.push(unlockVal);
+      }
+      return next;
+    });
+
+    let friendlyName = `QRコード ${unlockVal}`;
+    if (unlockVal.includes("_")) {
+      const parts = unlockVal.split("_");
+      friendlyName = `${parts[0]}枚コラージュの「QRコード ${parts[1] === "1" ? "A" : "B"}」`;
+    }
+
+    const customUnlockMsg = getUnlockMessageByLockId(unlockVal);
+    if (customUnlockMsg) {
+      setToastMessage(`🔑 ${customUnlockMsg}`);
+    } else {
+      setToastMessage(`🔑 ${friendlyName} を読み取り、枠を開放しました！`);
+    }
+    setTimeout(() => setToastMessage(null), 4000);
+    return "unlocked";
+  }, [presetId, unlockedQRs, setUnlockedQRs]);
+
+  // アプリ内で読み取った QR を処理する。使えないときは読み取り画面に出すエラー文言を返す
+  const handleQrDetected = (text: string): string | null => {
+    const code = parseUnlockCode(text);
+    if (!code) return "このQRコードは使えません";
+    const outcome = applyUnlockCode(code);
+    if (outcome === "invalid") return "このQRコードは現在のテーマでは使用できません";
+    if (outcome === "already") {
+      setToastMessage("この枠はすでに開いています");
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+    setIsScannerOpen(false);
+    return null;
+  };
+
   // URLの ?unlock=... パラメータと ?lock=... パラメータを監視
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -54,43 +102,11 @@ export default function Home() {
       if (unlockVal && !presetId) return;
 
       if (unlockVal) {
-        const preset = presetId ? getPresetById(presetId) : null;
-        const isValid = preset?.slotLocks ? Object.values(preset.slotLocks).includes(unlockVal) : false;
-
-        if (!isValid) {
+        if (applyUnlockCode(unlockVal) === "invalid") {
           setToastMessage("このQRコードは現在のテーマでは使用できません");
           setTimeout(() => setToastMessage(null), 4000);
-          params.delete("unlock");
-          const newSearch = params.toString();
-          const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
-          window.history.replaceState({}, "", newPath);
-          return;
         }
 
-        if (!unlockedQRs.includes(unlockVal)) {
-          setUnlockedQRs(prev => {
-            const next = [...prev];
-            if (!next.includes(unlockVal)) {
-              next.push(unlockVal);
-            }
-            return next;
-          });
-          
-          let friendlyName = `QRコード ${unlockVal}`;
-          if (unlockVal.includes("_")) {
-            const parts = unlockVal.split("_");
-            friendlyName = `${parts[0]}枚コラージュの「QRコード ${parts[1] === "1" ? "A" : "B"}」`;
-          }
-          
-          const customUnlockMsg = getUnlockMessageByLockId(unlockVal);
-          if (customUnlockMsg) {
-            setToastMessage(`🔑 ${customUnlockMsg}`);
-          } else {
-            setToastMessage(`🔑 ${friendlyName} を読み取り、枠を開放しました！`);
-          }
-          setTimeout(() => setToastMessage(null), 4000);
-        }
-        
         params.delete("unlock");
         const newSearch = params.toString();
         const newPath = window.location.pathname + (newSearch ? `?${newSearch}` : "");
@@ -111,7 +127,7 @@ export default function Home() {
         window.history.replaceState({}, "", newPath);
       }
     }
-  }, [unlockedQRs, setUnlockedQRs, presetId]);
+  }, [applyUnlockCode, setUnlockedQRs, presetId]);
 
   const getContrastColor = (hex: string) => 
     (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
@@ -173,7 +189,7 @@ export default function Home() {
         activeTab === "create" ? "h-dvh overflow-y-auto" : "min-h-dvh"
       }`}
     >
-      <CollageBackground />
+      <CollageBackground variant="minimal" />
 
       {/* トースト表示 */}
       {toastMessage && (
@@ -282,7 +298,7 @@ export default function Home() {
           ) : (
             <>
               {/* まだ解除していないロック枠の案内（撮る順番は自由なので、先に伝える） */}
-              {pendingLockMessages.length > 0 && <LockedSlotsChip messages={pendingLockMessages} />}
+              {pendingLockMessages.length > 0 && <LockedSlotsChip messages={pendingLockMessages} onScan={() => setIsScannerOpen(true)} />}
 
               {/* フレームは残った高さに合わせて縮む。小さい端末では 320px で止めてスクロールさせる */}
               {template && (
@@ -335,6 +351,7 @@ export default function Home() {
                 errorMessage={errorMessage}
                 onOpenCamera={() => setIsCameraOpen(true)}
                 onSubmit={submit}
+                onScanQr={() => setIsScannerOpen(true)}
               />
             </>
           )}
@@ -377,6 +394,11 @@ export default function Home() {
             </div>
           )}
         </section>
+      )}
+
+      {/* アプリ内での QR 読み取り */}
+      {isScannerOpen && (
+        <QrScannerScreen onDetect={handleQrDetected} onClose={() => setIsScannerOpen(false)} />
       )}
 
       {/* アプリ内カメラオーバーレイ */}

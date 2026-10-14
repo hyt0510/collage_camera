@@ -4,13 +4,14 @@ import { useState } from "react";
 
 interface Props {
   messages: string[];
+  onScan: () => void;
 }
 
 /**
  * まだ解除していないロック枠の数を1行で出し、タップで解除場所の一覧を重ねて開く
  * （一覧は重ねて表示するので、開いてもフレームの位置はずれない）
  */
-export function LockedSlotsChip({ messages }: Props) {
+export function LockedSlotsChip({ messages, onScan }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -35,6 +36,16 @@ export function LockedSlotsChip({ messages }: Props) {
               </li>
             ))}
           </ul>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onScan();
+            }}
+            className="mt-3 w-full h-10 bg-white text-zinc-800 text-sm font-bold border-2 border-zinc-800 shadow-[2px_3px_0_0_rgba(0,0,0,0.2)] active:translate-y-0.5 active:shadow-none transition-all"
+          >
+            📷 QRコードを読み取る
+          </button>
         </div>
       )}
     </div>

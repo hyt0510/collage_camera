@@ -1,6 +1,16 @@
 import React from "react";
 
-export function CollageBackground({ isOverlay }: { isOverlay?: boolean }) {
+export function CollageBackground({ isOverlay, variant = "full" }: { isOverlay?: boolean; variant?: "full" | "minimal" }) {
+  // 参加者のスマホ画面では、フレームより背景が目立たないよう、四隅のテープ2枚だけを薄く出す
+  if (variant === "minimal") {
+    return (
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-40">
+        <div className="absolute -top-6 -left-12 w-48 h-20 bg-[#010193] rotate-[-15deg] masking-tape shadow-sm" />
+        <div className="absolute -bottom-8 -right-8 w-56 h-24 bg-[#CA0000] rotate-[-25deg] masking-tape shadow-sm" />
+      </div>
+    );
+  }
+
   return (
     <div className={`absolute inset-0 z-0 overflow-hidden pointer-events-none ${isOverlay ? "opacity-100" : "opacity-80 mix-blend-multiply"}`}>
       {/* --- Top Left --- */}

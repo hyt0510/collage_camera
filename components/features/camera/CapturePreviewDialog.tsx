@@ -15,7 +15,7 @@ interface Props {
 export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath, onRetake, onUse }: Props) {
   return (
     <div className="absolute inset-0 bg-zinc-50 flex flex-col animate-preview-in p-6 pt-16 z-50 overflow-hidden">
-      <CollageBackground />
+      <CollageBackground variant="minimal" />
       {/* プレビュー画像（スクラップブック風） */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 min-h-0 py-4 mt-4">
         <div 
