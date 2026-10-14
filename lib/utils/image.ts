@@ -101,6 +101,22 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/**
+ * CSS の object-cover と同じく、描画先を隙間なく埋めるために元画像から切り出す範囲を求める
+ */
+export function getCoverSourceRect(imgW: number, imgH: number, destW: number, destH: number) {
+  const imgRatio = imgW / imgH;
+  const destRatio = destW / destH;
+  if (imgRatio > destRatio) {
+    // 画像の方が横長 -> 左右をカット
+    const sw = imgH * destRatio;
+    return { sx: (imgW - sw) / 2, sy: 0, sw, sh: imgH };
+  }
+  // 画像の方が縦長 -> 上下をカット
+  const sh = imgW / destRatio;
+  return { sx: 0, sy: (imgH - sh) / 2, sw: imgW, sh };
+}
+
 export async function generateCollageImage(
   template: FrameTemplate,
   images: Record<string, string>,
@@ -160,32 +176,17 @@ export async function generateCollageImage(
     ctx.closePath();
     ctx.clip();
 
-    // 画像を中央配置（cover/center-crop）
-    const imgRatio = img.width / img.height;
-    const polyRatio = polyW / polyH;
+    // 拡大は切り抜きの形だけに使い、写真は等倍で描く（クリップ領域は変形を戻しても残る）
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    let sx, sy, sw, sh;
-    if (imgRatio > polyRatio) {
-      // 画像の方が横長 -> 左右をカット
-      sh = img.height;
-      sw = sh * polyRatio;
-      sx = (img.width - sw) / 2;
-      sy = 0;
-    } else {
-      // 画像の方が縦長 -> 上下をカット
-      sw = img.width;
-      sh = sw / polyRatio;
-      sx = 0;
-      sy = (img.height - sh) / 2;
-    }
+    // 撮影画面・プレビューと同じく、写真を画面全体に cover で敷いてから枠の形で切り抜く
+    const { sx, sy, sw, sh } = getCoverSourceRect(img.width, img.height, width, height);
 
     // 0以下のサイズでの drawImage は SyntaxError (The string did not match the expected pattern) の原因になる
-    const drawW = Math.max(1, polyW);
-    const drawH = Math.max(1, polyH);
     const sourceW = Math.max(1, sw);
     const sourceH = Math.max(1, sh);
 
-    ctx.drawImage(img, sx, sy, sourceW, sourceH, minX, minY, drawW, drawH);
+    ctx.drawImage(img, sx, sy, sourceW, sourceH, 0, 0, width, height);
     ctx.restore();
   }
 
