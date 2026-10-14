@@ -7,6 +7,7 @@ export default defineConfig({
     // 純粋関数のテストのみなので node 環境。コンポーネントを試すときは jsdom を追加する
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules", ".next"],
+    // .claude/worktrees に置かれる別の作業ツリー（とその node_modules）を拾わないようにする
+    exclude: ["**/node_modules/**", ".next", ".claude/**"],
   },
 });
