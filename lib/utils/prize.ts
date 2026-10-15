@@ -3,7 +3,7 @@
  */
 
 // 交換してから「景品交換OK」の画面を出せる時間
-export const PRIZE_TICKET_DURATION_MS = 10 * 60 * 1000;
+export const PRIZE_TICKET_DURATION_MS = 5 * 60 * 1000;
 
 /**
  * 本部テントの QR コード（`?prize=...` 付きの URL）から合言葉を取り出す。
