@@ -75,7 +75,7 @@ export default function AdminPage() {
         fetch("/api/capture-preset", { cache: "no-store" }),
       ]);
       const submissionsPayload = (await submissionsResponse.json()) as
-        | { submissions: Submission[]; prizeRedemptionCount: number }
+        | { submissions: Submission[]; prizeRedemptionCount: number | null }
         | { error: string };
       const presetsPayload = (await presetsResponse.json()) as
         | { presets: PresetSummary[]; activePreset: ActivePreset }
@@ -90,6 +90,7 @@ export default function AdminPage() {
       } else {
         errors.push("投稿一覧の取得に失敗しました。");
         setSubmissionsFailed(true);
+        setPrizeRedemptionCount(null);
       }
       if (presetsResponse.ok && "presets" in presetsPayload) {
         setPresets(presetsPayload.presets);
@@ -103,6 +104,7 @@ export default function AdminPage() {
       console.error("Admin refresh error:", err);
       setError("ネットワークエラーまたはサーバーエラーが発生しました。");
       setSubmissionsFailed(true);
+      setPrizeRedemptionCount(null);
     }
   }, []);
 
@@ -316,9 +318,12 @@ export default function AdminPage() {
                 </p>
 
                 <p className="text-zinc-600">
-                  景品: {submission.prizeRedeemedAt
-                    ? `交換済み ${new Date(submission.prizeRedeemedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
-                    : "未"}
+                  {/* 交換記録を読めなかったときは「未」と誤って見せない */}
+                  景品: {prizeRedemptionCount === null
+                    ? "—"
+                    : submission.prizeRedeemedAt
+                      ? `交換済み ${new Date(submission.prizeRedeemedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
+                      : "未"}
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button

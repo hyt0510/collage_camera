@@ -84,9 +84,13 @@ export async function GET(request: Request) {
         })),
         collageDataUrl: submission.collageImageUrl,
         // 景品交換は人（UID）ごとなので、同じ人の投稿にはすべて同じ時刻が付く
-        prizeRedeemedAt: redemptions[submission.userId] ?? null,
+        prizeRedeemedAt: redemptions?.[submission.userId] ?? null,
       }));
-      return NextResponse.json({ submissions: serialized, prizeRedemptionCount: Object.keys(redemptions).length });
+      // 交換記録を読めなかったときは null にして、管理画面で「—」と出す
+      return NextResponse.json({
+        submissions: serialized,
+        prizeRedemptionCount: redemptions ? Object.keys(redemptions).length : null,
+      });
     }
 
     const now = Date.now();

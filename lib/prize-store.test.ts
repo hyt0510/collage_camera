@@ -7,11 +7,13 @@ const state: { redeemedAt: string | null; hasSubmission: boolean } = { redeemedA
 const created: unknown[] = [];
 const redemptionRef = { path: "prize_redemptions/user-1" };
 const submissionsQuery = { path: "submissions?userId=user-1" };
+// 交換記録の全件取得（管理画面用）
+const listRedemptions = vi.fn();
 
 vi.mock("@/lib/firebase-admin", () => ({
   db: {
     collection: (name: string) => name === "prize_redemptions"
-      ? { doc: () => redemptionRef }
+      ? { doc: () => redemptionRef, get: listRedemptions }
       : { where: () => ({ limit: () => submissionsQuery }) },
     runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({
       get: async (target: unknown) => target === redemptionRef
@@ -22,7 +24,7 @@ vi.mock("@/lib/firebase-admin", () => ({
   },
 }));
 
-const { redeemPrize } = await import("./prize-store");
+const { listPrizeRedemptions, redeemPrize } = await import("./prize-store");
 const NOW = new Date("2026-10-15T01:00:00.000Z");
 
 describe("redeemPrize", () => {
@@ -48,5 +50,23 @@ describe("redeemPrize", () => {
     state.redeemedAt = "2026-10-15T00:30:00.000Z";
     expect(await redeemPrize("user-1", NOW)).toEqual({ result: "already", redeemedAt: "2026-10-15T00:30:00.000Z" });
     expect(created).toHaveLength(0);
+  });
+});
+
+describe("listPrizeRedemptions", () => {
+  beforeEach(() => {
+    listRedemptions.mockReset();
+  });
+
+  it("UID ごとの交換時刻を返す", async () => {
+    listRedemptions.mockResolvedValue({
+      docs: [{ id: "user-1", get: () => "2026-10-15T00:30:00.000Z" }],
+    });
+    expect(await listPrizeRedemptions()).toEqual({ "user-1": "2026-10-15T00:30:00.000Z" });
+  });
+
+  it("取得に失敗したら投げずに null を返す（管理画面の投稿一覧を止めないため）", async () => {
+    listRedemptions.mockRejectedValue(new Error("unavailable"));
+    expect(await listPrizeRedemptions()).toBeNull();
   });
 });

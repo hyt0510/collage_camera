@@ -52,8 +52,16 @@ export async function redeemPrize(userId: string, now: Date = new Date()): Promi
   });
 }
 
-/** 管理画面用。UID ごとの交換時刻 */
-export async function listPrizeRedemptions(): Promise<Record<string, string>> {
-  const snapshot = await db.collection(REDEMPTION_COLLECTION).get();
-  return Object.fromEntries(snapshot.docs.map((doc) => [doc.id, doc.get("redeemedAt") as string]));
+/**
+ * 管理画面用。UID ごとの交換時刻
+ * 取得に失敗しても投稿一覧（検閲の作業）を止めないよう、投げずに null を返す
+ */
+export async function listPrizeRedemptions(): Promise<Record<string, string> | null> {
+  try {
+    const snapshot = await db.collection(REDEMPTION_COLLECTION).get();
+    return Object.fromEntries(snapshot.docs.map((doc) => [doc.id, doc.get("redeemedAt") as string]));
+  } catch (e) {
+    console.error("Failed to list prize redemptions:", e);
+    return null;
+  }
 }
