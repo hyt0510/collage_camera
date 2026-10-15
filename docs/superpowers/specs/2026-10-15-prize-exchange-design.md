@@ -22,13 +22,14 @@
 3. サーバーが交換を記録し、スマホが全画面緑の「景品交換OK」画面になる。画面には現在時刻（秒まで）が動いて表示される。
 4. スタッフは「緑で、時計が動いている」ことを見てガチャを1回回してもらう。
 5. 緑の画面は交換から10分間だけ出せる。それ以降は「景品交換済み HH:MM」のタグだけが残る。
+6. 10分以内にもう一度画面を出すと（閉じて開き直す、QR を読み直す、再読み込みしてボタンから出す）、黄色の「再表示」画面になる。同じ人が2回まわすのを防ぐため。スタッフは黄色の画面では、交換時刻が今さっき（通信のやり直し）かを確かめる。
 
 ## QR コードと合言葉
 
 - QR の中身は `https://collage-camera.vercel.app/?prize=<合言葉>`。
 - 合言葉は環境変数 `PRIZE_QR_CODE` に置く。日ごとに変える場合は、環境変数を変えて QR を印刷し直す。
 - `PRIZE_QR_CODE` が未設定なら、交換 API は 503 を返し、交換できない。
-- OS のカメラで読んで `?prize=` 付きの URL が開いた場合も、アプリ内で読んだときと同じように交換する。別のブラウザで開いた場合は UID が違うので「対象の投稿がない」と表示する。
+- OS のカメラで読んで `?prize=` 付きの URL が開いた場合も、アプリ内で読んだときと同じように交換する。別のブラウザで開いた場合は UID が違うので「対象の投稿がない」と表示する。URL から開いたときは、交換の結果（失敗の理由を含む）が見えるよう、履歴タブに切り替える。
 
 ## 対象条件
 
@@ -49,22 +50,22 @@
 
 どちらも `Authorization: Bearer <Firebase IDトークン>` が必要。`dynamic = "force-dynamic"`。
 
-- `GET`：`{ eligible: boolean, redeemedAt: string | null }` を返す。
+- `GET`：`{ eligible: boolean, redeemedAt: string | null, ticketRemainingMs: number }` を返す。`ticketRemainingMs` は緑の画面を出せる残り時間で、スマホの時計のずれに左右されないようサーバーの時刻で計算する。
 - `POST`（本文 `{ code: string }`）：
   - 合言葉が違う → 400 `{ error }`
-  - 対象の投稿がない → 409 `{ result: "not_eligible" }`
-  - すでに交換済み → 200 `{ result: "already", redeemedAt }`
-  - 交換した → 200 `{ result: "redeemed", redeemedAt }`
+  - 対象の投稿がない → 409 `{ error }`
+  - すでに交換済み → 200 `{ result: "already", redeemedAt, ticketRemainingMs }`
+  - 交換した → 200 `{ result: "redeemed", redeemedAt, ticketRemainingMs }`
 
 交換はトランザクションで行い、同時に2回届いても記録は1件だけにする。
 
 ## クライアント
 
-- `lib/utils/prize.ts`：QR の文字列から合言葉を取り出す `parsePrizeCode`、緑の画面を出す期間かを判定する `isPrizeTicketActive`（純粋関数、テストあり）。
+- `lib/utils/prize.ts`：QR の文字列から合言葉を取り出す `parsePrizeCode`、緑の画面を出せる残り時間を計算する `getTicketRemainingMs`、残り時間を「m:ss」で表す `formatRemaining`（純粋関数、テストあり）。
 - `services/api/prize.ts`：API の fetch と型。
 - `hooks/usePrize.ts`：状態の取得（マウント時、投稿後）、読み取り後の交換、`?prize=` の URL の処理。
 - `components/features/prize/PrizeCard.tsx`：履歴タブのカード。未投稿・交換前・交換済みで表示を変える。
-- `components/features/prize/PrizeTicketScreen.tsx`：緑の全画面。現在時刻を1秒ごとに更新する。
+- `components/features/prize/PrizeTicketScreen.tsx`：緑の全画面（再表示のときは黄色）。現在時刻を1秒ごとに更新する。
 - `app/page.tsx`：上の部品を置くだけにする。読み取り画面は既存の `QrScannerScreen` を使う。
 
 ## 管理画面
@@ -72,8 +73,9 @@
 - 投稿ごとの「バザー券消込」ボタンと `redeem` 操作、`Submission.redeemed` を外す。
 - 投稿カードに「景品：交換済み HH:MM / 未」を出す。投稿一覧の API（`scope=all`）が `prize_redemptions` を読み、投稿の `userId` に合わせて `prizeRedeemedAt` を付ける。
 - 見出しに交換済みの人数を出す。
+- 交換記録を読めなかったときも投稿一覧は出す。そのときは人数と各投稿の景品欄を「—」にする（「未」と誤って見せないため）。
 
 ## テスト
 
 - `lib/utils/prize.test.ts`：合言葉の取り出し、10分の境界。
-- `lib/prize-store.test.ts`：Firestore をモックし、対象外・交換済み・新規交換の3通り。
+- `lib/prize-store.test.ts`：Firestore をモックし、交換の3通り（対象外・交換済み・新規交換）と、管理画面用の一覧取得（成功・失敗）。
