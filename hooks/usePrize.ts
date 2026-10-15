@@ -57,7 +57,7 @@ export function usePrize(user: User | null, latestSubmissionId: string | null, o
       const res = await redeemPrizeCode(code, await user.getIdToken());
       applyStatus({ eligible: true, redeemedAt: res.redeemedAt, ticketRemainingMs: res.ticketRemainingMs });
       if (res.ticketRemainingMs > 0) {
-        // 通信が途切れて読み直した場合も、10分以内なら OK の画面をもう一度出す（再表示として）
+        // 通信が途切れて読み直した場合も、5分以内なら OK の画面をもう一度出す（再表示として）
         setIsReshow(res.result === "already");
         setIsTicketOpen(true);
       } else {

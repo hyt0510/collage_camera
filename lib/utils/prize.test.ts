@@ -23,23 +23,23 @@ describe("getTicketRemainingMs", () => {
   const redeemedAt = "2026-10-15T01:00:00.000Z";
   const at = Date.parse(redeemedAt);
 
-  it("交換した直後は10分を返す", () => {
+  it("交換した直後は5分を返す", () => {
     expect(getTicketRemainingMs(redeemedAt, at)).toBe(PRIZE_TICKET_DURATION_MS);
   });
 
-  it("3分たったら残り7分を返す", () => {
-    expect(getTicketRemainingMs(redeemedAt, at + 3 * 60_000)).toBe(7 * 60_000);
+  it("3分たったら残り2分を返す", () => {
+    expect(getTicketRemainingMs(redeemedAt, at + 3 * 60_000)).toBe(2 * 60_000);
   });
 
-  it("10分ちょうどで0を返す", () => {
+  it("5分ちょうどで0を返す", () => {
     expect(getTicketRemainingMs(redeemedAt, at + PRIZE_TICKET_DURATION_MS)).toBe(0);
   });
 
-  it("10分を過ぎても負の値にはしない", () => {
+  it("5分を過ぎても負の値にはしない", () => {
     expect(getTicketRemainingMs(redeemedAt, at + 60 * 60_000)).toBe(0);
   });
 
-  it("交換時刻が未来でも10分を超えない", () => {
+  it("交換時刻が未来でも5分を超えない", () => {
     expect(getTicketRemainingMs(redeemedAt, at - 60_000)).toBe(PRIZE_TICKET_DURATION_MS);
   });
 
