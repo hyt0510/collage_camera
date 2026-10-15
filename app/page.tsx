@@ -12,6 +12,10 @@ import { getCapturePanelMode } from "@/lib/utils/capture-panel";
 import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById } from "@/lib/collage-config";
 import { findNextSlotId } from "@/lib/utils/slots";
 import { parseUnlockCode } from "@/lib/utils/qr";
+import { usePrize } from "@/hooks/usePrize";
+import { PrizeCard } from "@/components/features/prize/PrizeCard";
+import { PrizeTicketScreen } from "@/components/features/prize/PrizeTicketScreen";
+import { parsePrizeCode } from "@/lib/utils/prize";
 
 export default function Home() {
   const { user, loading: authLoading, error: authError } = useAuth();
@@ -22,6 +26,9 @@ export default function Home() {
     hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
+
+  const prize = usePrize(user, result?.id ?? null);
+  const [isPrizeScannerOpen, setIsPrizeScannerOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -79,6 +86,7 @@ export default function Home() {
   // アプリ内で読み取った QR を処理する。使えないときは読み取り画面に出すエラー文言を返す
   const handleQrDetected = (text: string): string | null => {
     const code = parseUnlockCode(text);
+    if (!code && parsePrizeCode(text)) return "景品交換のQRコードです。「履歴」タブの景品交換から読み取ってください";
     if (!code) return "このQRコードは使えません";
     // 読み取りは選択中のロック枠から開くので、その枠の QR 以外では解除しない
     if (lockId && code !== lockId) {
@@ -91,6 +99,15 @@ export default function Home() {
       setTimeout(() => setToastMessage(null), 4000);
     }
     setIsScannerOpen(false);
+    return null;
+  };
+
+  // 本部テントの QR を読んだら交換する。結果は履歴タブのカードと OK の画面に出す
+  const handlePrizeQrDetected = (text: string): string | null => {
+    const code = parsePrizeCode(text);
+    if (!code) return "本部テントの景品交換QRコードを読み取ってください";
+    setIsPrizeScannerOpen(false);
+    void prize.redeem(code);
     return null;
   };
 
@@ -353,6 +370,15 @@ export default function Home() {
         </>
       ) : (
         <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300 relative z-10">
+          <PrizeCard
+            status={prize.status}
+            redeeming={prize.redeeming}
+            message={prize.message}
+            canShowTicket={prize.canShowTicket}
+            onScan={() => setIsPrizeScannerOpen(true)}
+            onShowTicket={prize.openTicket}
+          />
+
           <h2 className="text-lg font-bold text-zinc-800 px-2">作成したコラージュ</h2>
           
           {collageHistory.length === 0 ? (
@@ -394,6 +420,20 @@ export default function Home() {
       {/* アプリ内での QR 読み取り */}
       {isScannerOpen && (
         <QrScannerScreen onDetect={handleQrDetected} onClose={() => setIsScannerOpen(false)} />
+      )}
+
+      {/* 本部テントの景品交換 QR の読み取り */}
+      {isPrizeScannerOpen && (
+        <QrScannerScreen onDetect={handlePrizeQrDetected} onClose={() => setIsPrizeScannerOpen(false)} />
+      )}
+
+      {/* スタッフに見せる「景品交換OK」の画面 */}
+      {prize.isTicketOpen && prize.ticketUntil !== null && prize.status?.redeemedAt && (
+        <PrizeTicketScreen
+          until={prize.ticketUntil}
+          redeemedAt={prize.status.redeemedAt}
+          onClose={prize.closeTicket}
+        />
       )}
 
       {/* アプリ内カメラオーバーレイ */}
