@@ -4,10 +4,10 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { updateSubmissionStatus } from "@/lib/submission-store";
 import { isValidId } from "@/lib/submission-validation";
 
-type Action = "approve" | "hide" | "redeem";
+type Action = "approve" | "hide";
 
 function isAction(value: unknown): value is Action {
-  return value === "approve" || value === "hide" || value === "redeem";
+  return value === "approve" || value === "hide";
 }
 
 export async function PATCH(
@@ -38,7 +38,7 @@ export async function PATCH(
   const action = (raw as { action?: unknown })?.action;
   if (!isAction(action)) {
     return NextResponse.json(
-      { error: "action は approve/hide/redeem のいずれかを指定してください。" },
+      { error: "action は approve/hide のいずれかを指定してください。" },
       { status: 400 },
     );
   }

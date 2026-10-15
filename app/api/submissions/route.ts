@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { moderateImage } from "@/lib/moderation";
 import { parseSubmissionBody } from "@/lib/submission-validation";
+import { listPrizeRedemptions } from "@/lib/prize-store";
 import {
   createSubmission,
   listAllSubmissions,
@@ -71,7 +72,10 @@ export async function GET(request: Request) {
       if (denied) return denied;
 
       // 管理用画面はリアルタイム性を優先するためキャッシュしない
-      const submissions = await withAdminImageUrls(await listAllSubmissions());
+      const [submissions, redemptions] = await Promise.all([
+        listAllSubmissions().then(withAdminImageUrls),
+        listPrizeRedemptions(),
+      ]);
       const serialized = submissions.map((submission) => ({
         ...submission,
         items: submission.items.map((item) => ({
@@ -79,8 +83,14 @@ export async function GET(request: Request) {
           dataUrl: item.imageUrl,
         })),
         collageDataUrl: submission.collageImageUrl,
+        // 景品交換は人（UID）ごとなので、同じ人の投稿にはすべて同じ時刻が付く
+        prizeRedeemedAt: redemptions?.[submission.userId] ?? null,
       }));
-      return NextResponse.json({ submissions: serialized });
+      // 交換記録を読めなかったときは null にして、管理画面で「—」と出す
+      return NextResponse.json({
+        submissions: serialized,
+        prizeRedemptionCount: redemptions ? Object.keys(redemptions).length : null,
+      });
     }
 
     const now = Date.now();

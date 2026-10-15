@@ -41,7 +41,6 @@ export type Submission = {
   presetId?: string;
   createdAt: string;
   status: ModerationStatus;
-  redeemed: boolean;
   placement: Placement;
   items: SubmissionItem[];
   collageImageUrl?: string;
@@ -165,7 +164,6 @@ export async function createSubmission(input: {
     presetId: input.presetId,
     createdAt: new Date().toISOString(),
     status: input.status,
-    redeemed: false,
     placement,
     items: input.items.map((item) => ({ polygonId: item.polygonId, theme: item.theme })),
     collageImageUrl,
@@ -238,7 +236,7 @@ export async function withAdminImageUrls(submissions: Submission[]): Promise<Sub
 
 export async function updateSubmissionStatus(
   id: string,
-  action: "approve" | "hide" | "redeem",
+  action: "approve" | "hide",
 ): Promise<Submission | null> {
   const ref = db.collection("submissions").doc(id);
   const doc = await ref.get();
@@ -261,7 +259,6 @@ export async function updateSubmissionStatus(
       console.error(`Failed to make images private for ${id}:`, e);
     }
   }
-  if (action === "redeem") await ref.update({ redeemed: true });
 
   const updated = await ref.get();
   return (updated.data() as Submission) ?? null;

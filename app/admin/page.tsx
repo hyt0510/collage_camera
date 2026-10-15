@@ -7,7 +7,7 @@ type Submission = {
   id: string;
   createdAt: string;
   status: "approved" | "pending_manual" | "hidden_auto" | "hidden_manual";
-  redeemed: boolean;
+  prizeRedeemedAt: string | null;
   placement: { label: string };
   collageDataUrl?: string;
   moderation?: { source: string; reason: string; safe: boolean | null };
@@ -66,6 +66,7 @@ export default function AdminPage() {
   // 取得に失敗したときは件数を「0件」と誤表示しない
   const [submissionsFailed, setSubmissionsFailed] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [prizeRedemptionCount, setPrizeRedemptionCount] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -74,7 +75,7 @@ export default function AdminPage() {
         fetch("/api/capture-preset", { cache: "no-store" }),
       ]);
       const submissionsPayload = (await submissionsResponse.json()) as
-        | { submissions: Submission[] }
+        | { submissions: Submission[]; prizeRedemptionCount: number | null }
         | { error: string };
       const presetsPayload = (await presetsResponse.json()) as
         | { presets: PresetSummary[]; activePreset: ActivePreset }
@@ -84,10 +85,12 @@ export default function AdminPage() {
       const errors: string[] = [];
       if (submissionsResponse.ok && "submissions" in submissionsPayload) {
         setSubmissions(submissionsPayload.submissions);
+        setPrizeRedemptionCount(submissionsPayload.prizeRedemptionCount);
         setSubmissionsFailed(false);
       } else {
         errors.push("投稿一覧の取得に失敗しました。");
         setSubmissionsFailed(true);
+        setPrizeRedemptionCount(null);
       }
       if (presetsResponse.ok && "presets" in presetsPayload) {
         setPresets(presetsPayload.presets);
@@ -101,6 +104,7 @@ export default function AdminPage() {
       console.error("Admin refresh error:", err);
       setError("ネットワークエラーまたはサーバーエラーが発生しました。");
       setSubmissionsFailed(true);
+      setPrizeRedemptionCount(null);
     }
   }, []);
 
@@ -111,7 +115,7 @@ export default function AdminPage() {
     return () => window.clearInterval(timerId);
   }, [refresh]);
 
-  async function mutate(id: string, action: "approve" | "hide" | "redeem") {
+  async function mutate(id: string, action: "approve" | "hide") {
     const response = await fetch(`/api/submissions/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -213,6 +217,10 @@ export default function AdminPage() {
               </>
             )}
           </p>
+          <p className="mt-1 text-sm text-zinc-600">
+            景品交換済み:{" "}
+            <span className="font-semibold">{prizeRedemptionCount ?? "—"}</span> 人
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -309,7 +317,14 @@ export default function AdminPage() {
                   検閲: {moderation?.source} / {moderation?.reason}
                 </p>
 
-                <p className="text-zinc-600">消込: {submission.redeemed ? "済み" : "未"}</p>
+                <p className="text-zinc-600">
+                  {/* 交換記録を読めなかったときは「未」と誤って見せない */}
+                  景品: {prizeRedemptionCount === null
+                    ? "—"
+                    : submission.prizeRedeemedAt
+                      ? `交換済み ${new Date(submission.prizeRedeemedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
+                      : "未"}
+                </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     type="button"
@@ -324,13 +339,6 @@ export default function AdminPage() {
                     className="rounded-md bg-zinc-700 px-2 py-1 text-xs font-semibold text-white"
                   >
                     非表示
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => mutate(submission.id, "redeem")}
-                    className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white"
-                  >
-                    バザー券消込
                   </button>
                   <button
                     type="button"
