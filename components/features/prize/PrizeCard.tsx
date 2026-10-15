@@ -19,14 +19,14 @@ const formatTime = (iso: string) =>
  * 履歴タブの先頭に出す景品交換のカード。未投稿・交換前・交換済みで表示を変える
  */
 export function PrizeCard({ status, redeeming, message, canShowTicket, onScan, onShowTicket }: Props) {
-  // 状態を取得するまでは何も出さない（「対象外」と誤って見せないため）
-  if (!status) return null;
+  // 状態を取得するまでは何も出さない（「対象外」と誤って見せないため）。ただし交換の失敗は必ず見せる
+  if (!status && !message) return null;
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm border border-zinc-100">
       <h3 className="text-sm font-bold text-zinc-800">景品交換（本部テントのガチャ）</h3>
 
-      {status.redeemedAt ? (
+      {!status ? null : status.redeemedAt ? (
         <div className="mt-2 flex flex-col gap-2">
           <p className="inline-flex w-fit items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-white">
             景品交換済み {formatTime(status.redeemedAt)}

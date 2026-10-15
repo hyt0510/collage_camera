@@ -5,8 +5,9 @@ import { fetchPrizeStatus, redeemPrizeCode, type PrizeStatusResponse } from "@/s
 /**
  * 景品交換（本部テントのガチャ）の状態と、本部の QR を読んだあとの交換を扱う
  * latestSubmissionId が変わったら（投稿したら）対象かどうかを取り直す
+ * onRedeemFromUrl は ?prize= 付きで開かれたときに呼ぶ（結果が見える画面へ切り替えるため）
  */
-export function usePrize(user: User | null, latestSubmissionId: string | null) {
+export function usePrize(user: User | null, latestSubmissionId: string | null, onRedeemFromUrl: () => void) {
   const [status, setStatus] = useState<PrizeStatusResponse | null>(null);
   // 「景品交換OK」の画面を出せる期限（このスマホの時刻）
   const [ticketUntil, setTicketUntil] = useState<number | null>(null);
@@ -77,8 +78,11 @@ export function usePrize(user: User | null, latestSubmissionId: string | null) {
     const newSearch = params.toString();
     window.history.replaceState({}, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""));
     // effect の中で同期的に state を変えないよう、交換は次のタイミングで始める
-    queueMicrotask(() => void redeem(code));
-  }, [user, redeem]);
+    queueMicrotask(() => {
+      onRedeemFromUrl();
+      void redeem(code);
+    });
+  }, [user, redeem, onRedeemFromUrl]);
 
   const openTicket = useCallback(() => setIsTicketOpen(true), []);
   const closeTicket = useCallback(() => setIsTicketOpen(false), []);

@@ -27,10 +27,12 @@ export default function Home() {
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
-  const prize = usePrize(user, result?.id ?? null);
-  const [isPrizeScannerOpen, setIsPrizeScannerOpen] = useState(false);
-
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
+
+  // OS のカメラで本部の QR を読んで開かれたときは、交換の結果が出る履歴タブを見せる
+  const showHistoryTab = useCallback(() => setActiveTab("history"), []);
+  const prize = usePrize(user, result?.id ?? null, showHistoryTab);
+  const [isPrizeScannerOpen, setIsPrizeScannerOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
