@@ -14,6 +14,8 @@ export function usePrize(user: User | null, latestSubmissionId: string | null, o
   // 期限を過ぎたら true。開いている画面は閉じずに「期限切れ」の表示へ切り替える
   const [ticketExpired, setTicketExpired] = useState(false);
   const [isTicketOpen, setIsTicketOpen] = useState(false);
+  // 交換した直後の1回目でなければ true。スタッフが見分けられるよう画面の色を変える
+  const [isReshow, setIsReshow] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [message, setMessage] = useState("");
   // 連続で読み取っても二重に送らないよう、state の反映を待たずに止める
@@ -55,7 +57,8 @@ export function usePrize(user: User | null, latestSubmissionId: string | null, o
       const res = await redeemPrizeCode(code, await user.getIdToken());
       applyStatus({ eligible: true, redeemedAt: res.redeemedAt, ticketRemainingMs: res.ticketRemainingMs });
       if (res.ticketRemainingMs > 0) {
-        // 通信が途切れて読み直した場合も、10分以内なら OK の画面をもう一度出す
+        // 通信が途切れて読み直した場合も、10分以内なら OK の画面をもう一度出す（再表示として）
+        setIsReshow(res.result === "already");
         setIsTicketOpen(true);
       } else {
         setMessage("景品はすでに交換済みです。");
@@ -84,10 +87,13 @@ export function usePrize(user: User | null, latestSubmissionId: string | null, o
     });
   }, [user, redeem, onRedeemFromUrl]);
 
-  const openTicket = useCallback(() => setIsTicketOpen(true), []);
+  const openTicket = useCallback(() => {
+    setIsReshow(true);
+    setIsTicketOpen(true);
+  }, []);
   const closeTicket = useCallback(() => setIsTicketOpen(false), []);
 
   const canShowTicket = ticketUntil !== null && !ticketExpired;
 
-  return { status, ticketUntil, canShowTicket, isTicketOpen, redeeming, message, redeem, openTicket, closeTicket };
+  return { status, ticketUntil, canShowTicket, isTicketOpen, isReshow, redeeming, message, redeem, openTicket, closeTicket };
 }

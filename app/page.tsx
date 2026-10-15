@@ -434,6 +434,7 @@ export default function Home() {
         <PrizeTicketScreen
           until={prize.ticketUntil}
           redeemedAt={prize.status.redeemedAt}
+          isReshow={prize.isReshow}
           onClose={prize.closeTicket}
         />
       )}
