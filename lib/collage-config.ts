@@ -19,6 +19,8 @@ export type CapturePreset = {
   slotLocks?: Record<string, string>;
   lockMessages?: Record<string, string>;
   unlockMessages?: Record<string, string>;
+  // false なら、このプリセットで作った投稿は景品交換の対象外（事前公開用）
+  prizeEligible?: boolean;
 };
 
 export const FRAME_TEMPLATES: FrameTemplate[] = [
@@ -78,6 +80,15 @@ export function findTemplateById(templateId: string): FrameTemplate | null {
 
 export function getPresetById(presetId: string): CapturePreset | null {
   return CAPTURE_PRESETS.find((preset) => preset.id === presetId) ?? null;
+}
+
+/**
+ * そのプリセットで作った投稿が景品交換の対象になるか。
+ * presetId のない古い投稿や、設定から消したプリセットの投稿は対象にする
+ */
+export function isPrizeEligiblePreset(presetId: string | undefined): boolean {
+  if (!presetId) return true;
+  return getPresetById(presetId)?.prizeEligible !== false;
 }
 
 export function buildThemeMapFromPreset(template: FrameTemplate, preset: CapturePreset) {
