@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./firebase-admin";
+import { isPrizeEligiblePreset } from "./collage-config";
 
 /**
  * 景品交換（本部テントのガチャ）の記録。ドキュメント ID は匿名認証の UID
@@ -8,7 +9,7 @@ import { db } from "./firebase-admin";
 const REDEMPTION_COLLECTION = "prize_redemptions";
 
 export type PrizeStatus = {
-  // 投稿が1件以上あるか（状態は問わない）
+  // 景品の対象になる投稿が1件以上あるか（状態は問わない。事前公開用プリセットの投稿は数えない）
   eligible: boolean;
   redeemedAt: string | null;
 };
@@ -17,8 +18,13 @@ export type RedeemResult =
   | { result: "redeemed" | "already"; redeemedAt: string }
   | { result: "not_eligible" };
 
+// プリセットを見て判定するので全件取る（1人あたりの投稿は上限までしかない）
 function submissionsOf(userId: string) {
-  return db.collection("submissions").where("userId", "==", userId).limit(1);
+  return db.collection("submissions").where("userId", "==", userId);
+}
+
+function hasEligibleSubmission(submissions: { docs: { get(field: string): unknown }[] }): boolean {
+  return submissions.docs.some((doc) => isPrizeEligiblePreset(doc.get("presetId") as string | undefined));
 }
 
 export async function getPrizeStatus(userId: string): Promise<PrizeStatus> {
@@ -27,7 +33,7 @@ export async function getPrizeStatus(userId: string): Promise<PrizeStatus> {
     submissionsOf(userId).get(),
   ]);
   return {
-    eligible: !submissions.empty,
+    eligible: hasEligibleSubmission(submissions),
     redeemedAt: (redemption.get("redeemedAt") as string | undefined) ?? null,
   };
 }
@@ -44,7 +50,7 @@ export async function redeemPrize(userId: string, now: Date = new Date()): Promi
     }
 
     const submissions = await tx.get(submissionsOf(userId));
-    if (submissions.empty) return { result: "not_eligible" };
+    if (!hasEligibleSubmission(submissions)) return { result: "not_eligible" };
 
     const redeemedAt = now.toISOString();
     tx.create(ref, { redeemedAt });

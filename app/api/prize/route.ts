@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const outcome = await redeemPrize(uid);
     if (outcome.result === "not_eligible") {
       return NextResponse.json(
-        { error: "このブラウザで投稿したコラージュが見つかりません。コラージュを1枚投稿してから読み取ってください。" },
+        { error: "景品の対象になるコラージュが見つかりません。文化祭当日にコラージュを1枚投稿してから読み取ってください。" },
         { status: 409 },
       );
     }

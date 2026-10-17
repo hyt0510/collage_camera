@@ -57,7 +57,7 @@ export function PrizeCard({ status, redeeming, message, canShowTicket, onScan, o
         </div>
       ) : (
         <p className="mt-2 text-xs text-zinc-600 leading-relaxed">
-          コラージュを1枚投稿すると、本部テントでガチャを1回まわせます。
+          文化祭当日にコラージュを1枚投稿すると、本部テントでガチャを1回まわせます。
         </p>
       )}
 
