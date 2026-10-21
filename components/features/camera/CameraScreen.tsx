@@ -4,10 +4,10 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { CameraPreview } from "./CameraPreview";
 import { CameraControls } from "./CameraControls";
 import { CapturePreviewDialog } from "./CapturePreviewDialog";
+import { createCameraSession, getCameraSourceRect, watchCameraOrientation } from "@/lib/utils/camera";
 import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
-import { getCameraSourceRect } from "@/lib/utils/camera";
 
 type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -43,7 +43,6 @@ export function CameraScreen({
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>("pending");
   const [showFlash, setShowFlash] = useState(false);
-
   const [previewError, setPreviewError] = useState("");
   const [pasting, setPasting] = useState<{
     dataUrl: string;
@@ -70,15 +69,15 @@ export function CameraScreen({
   }, [pasting]);
 
   const streamRef = useRef<MediaStream | null>(null);
+  const [session] = useState(createCameraSession);
+  const switchingRef = useRef(false);
 
   // ストリーム停止ユーティリティ
   const stopStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-      setStream(null);
-    }
-  }, []);
+    session.stop();
+    streamRef.current = null;
+    setStream(null);
+  }, [session]);
 
   // カメラ起動
   const startCamera = useCallback(async (facing: "user" | "environment") => {
@@ -91,14 +90,15 @@ export function CameraScreen({
     stopStream();
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
+      const newStream = await session.start(() => navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facing,
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
         audio: false,
-      });
+      }));
+      if (!newStream) return;
 
       streamRef.current = newStream;
       setStream(newStream);
@@ -128,22 +128,32 @@ export function CameraScreen({
       } else {
         setPermissionStatus("error");
       }
+    } finally {
+      switchingRef.current = false;
     }
-  }, [stopStream]);
+  }, [stopStream, session]);
 
   // マウント時にカメラ起動、アンマウント時にストリーム解放
   useEffect(() => {
-    startCamera(facingMode);
+    let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) void startCamera(facingMode); });
 
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      cancelled = true;
+      session.stop();
+      streamRef.current = null;
     };
-    // facingMode の変更時のみ再起動（startCamera は依存に含めない）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facingMode]);
+  }, [facingMode, startCamera, session]);
+
+  // iOS の向き変更前の映像を残さず、内・外カメラとも現在の向きで起動し直す。
+  useEffect(() => {
+    if ((permissionStatus !== "granted" && permissionStatus !== "pending") || pasting) return;
+    return watchCameraOrientation(() => {
+      setPermissionStatus("pending");
+      setTorchEnabled(false);
+      void startCamera(facingMode);
+    });
+  }, [facingMode, permissionStatus, pasting, startCamera]);
 
   // シャッター処理
   const handleShutter = useCallback(() => {
@@ -192,6 +202,9 @@ export function CameraScreen({
 
   // カメラ切替
   const handleToggleCamera = useCallback(() => {
+    if (switchingRef.current) return;
+    switchingRef.current = true;
+    setPermissionStatus("pending");
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
     setTorchEnabled(false);
     setZoom(1);
@@ -377,8 +390,8 @@ export function CameraScreen({
         </>
       )}
 
-      {/* 閉じるボタン (エラー時以外の上部 fallback) */}
-      {showError && (
+      {/* 起動待ちでも画面を閉じ、遅れて届くカメラを停止できるようにする */}
+      {(showError || permissionStatus === "pending") && (
         <button
           onClick={handleClose}
           className="absolute top-12 left-5 z-20 w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform"
