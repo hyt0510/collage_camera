@@ -1,3 +1,14 @@
+/** iOS 26 の内カメラで、横向きの映像が外カメラと上下逆になる場合の補正。 */
+export function getCameraRotationCorrection(
+  facing: "user" | "environment", angle: number, userAgent: string,
+): 0 | 180 {
+  // Safari 26 は OS バージョンを 18.6 と報告するため、Safari 自身のバージョンも見る。
+  const isiOS26 = /iPhone/.test(userAgent) && /AppleWebKit/.test(userAgent)
+    && (/Version\/26(?:\.|\s|$)/.test(userAgent) || /OS 26(?:[_\s.]|$)/.test(userAgent));
+  const normalizedAngle = ((angle % 360) + 360) % 360;
+  return facing === "user" && isiOS26 && (normalizedAngle === 90 || normalizedAngle === 270) ? 180 : 0;
+}
+
 /** 向き変更の通知をまとめ、画面更新後にカメラの向きを再取得する。 */
 export function watchCameraOrientation(onChange: () => void) {
   let frame: number | null = null;

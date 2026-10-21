@@ -10,10 +10,11 @@ interface Props {
   clipPath?: string;
   slotColor?: string;
   zoom: number;
+  rotation: 0 | 180;
   onZoomChange: (zoom: number) => void;
 }
 
-export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, onZoomChange }: Props) {
+export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, rotation, onZoomChange }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
@@ -91,7 +92,7 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, onZ
           muted
           onClick={(e) => e.currentTarget.play()}
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ transform: `scale(${zoom})` }}
+          style={{ transform: `rotate(${rotation}deg) scale(${zoom})` }}
         />
 
         {/* ポリゴンクリップパスオーバーレイ */}

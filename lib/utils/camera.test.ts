@@ -1,5 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCameraSession, getPinchZoom, getCameraSourceRect, watchCameraOrientation } from "@/lib/utils/camera";
+import { createCameraSession, getPinchZoom, getCameraSourceRect, watchCameraOrientation, getCameraRotationCorrection } from "@/lib/utils/camera";
+
+describe("iOS 26 の内カメラの上下補正", () => {
+  const safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/26.0 Mobile/15E148 Safari/604.1";
+
+  it.each([90, -90, 270])("横向き %s 度では内カメラを180度補正する", (angle) => {
+    expect(getCameraRotationCorrection("user", angle, safari)).toBe(180);
+  });
+
+  it.each([0, 180, 360])("縦向き %s 度には補正しない", (angle) => {
+    expect(getCameraRotationCorrection("user", angle, safari)).toBe(0);
+  });
+
+  it("外カメラには補正しない", () => {
+    expect(getCameraRotationCorrection("environment", 90, safari)).toBe(0);
+    expect(getCameraRotationCorrection("environment", 270, safari)).toBe(0);
+  });
+
+  it("OSバージョンをそのまま報告するiOSブラウザにも対応する", () => {
+    const chrome = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/140.0 Mobile/15E148 Safari/604.1";
+    expect(getCameraRotationCorrection("user", 270, chrome)).toBe(180);
+  });
+
+  it("旧iOS、Android、PCには補正しない", () => {
+    expect(getCameraRotationCorrection("user", 90, safari.replace("Version/26.0", "Version/18.6"))).toBe(0);
+    expect(getCameraRotationCorrection("user", 90, "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140.0")).toBe(0);
+    expect(getCameraRotationCorrection("user", 90, "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15")).toBe(0);
+  });
+});
 
 describe("カメラの向きの更新", () => {
   it("重複する向き変更をまとめ、終了後には再起動しない", () => {

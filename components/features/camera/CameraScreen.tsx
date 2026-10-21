@@ -8,6 +8,7 @@ import { createCameraSession, getCameraSourceRect, watchCameraOrientation } from
 import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
+import { useCameraRotation } from "@/hooks/useCameraRotation";
 
 type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -36,6 +37,7 @@ export function CameraScreen({
 }: CameraScreenProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+  const rotation = useCameraRotation(facingMode);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
@@ -178,6 +180,11 @@ export function CameraScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // プレビューと同じ補正を焼き込み、撮影後だけ上下が変わるのを防ぐ。
+    if (rotation === 180) {
+      ctx.translate(width, height);
+      ctx.rotate(Math.PI);
+    }
     const { sx, sy, sw, sh } = getCameraSourceRect(width, height, zoom);
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
 
@@ -198,7 +205,7 @@ export function CameraScreen({
     setTimeout(() => setShowFlash(false), 250);
 
     setCapturedImage(dataUrl);
-  }, [zoom]);
+  }, [zoom, rotation]);
 
   // カメラ切替
   const handleToggleCamera = useCallback(() => {
@@ -309,7 +316,7 @@ export function CameraScreen({
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
         <>
-          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} onZoomChange={setZoom} />
+          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} rotation={rotation} onZoomChange={setZoom} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
           <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
