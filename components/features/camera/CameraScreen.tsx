@@ -299,12 +299,12 @@ export function CameraScreen({
           <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} onZoomChange={setZoom} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
-          <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
+          <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
             <div className="flex items-start gap-3">
               {/* 戻るボタン */}
               <button
                 onClick={handleClose}
-                className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white flex-shrink-0 active:scale-90 transition-transform"
+                className="pointer-events-auto w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white flex-shrink-0 active:scale-90 transition-transform"
                 aria-label="戻る"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
