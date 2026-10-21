@@ -2,17 +2,47 @@
 
 import React, { useRef, useEffect } from "react";
 import { getCenteredPolygon, toSvgPolygonPoints } from "@/lib/utils/styles";
+import { getPinchZoom } from "@/lib/utils/camera";
 
 interface Props {
   stream: MediaStream | null;
   showGrid: boolean;
   clipPath?: string;
   slotColor?: string;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
 }
 
-export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) {
+export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, onZoomChange }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
+
+  const getDistance = () => {
+    const [first, second] = [...pointers.current.values()];
+    return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : 0;
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "touch" || pointers.current.size >= 2) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) pinch.current = { distance: getDistance(), zoom };
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch.current) {
+      onZoomChange(getPinchZoom(pinch.current.zoom, pinch.current.distance, getDistance()));
+    }
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.delete(event.pointerId)) return;
+    pinch.current = null;
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -41,10 +71,18 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) 
   }, [stream]);
 
   return (
-    <div className="absolute inset-0 bg-black flex items-center justify-center overflow-hidden">
+    <div
+      className="absolute inset-0 bg-black flex items-center justify-center overflow-hidden"
+      style={{ touchAction: "none" }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onLostPointerCapture={handlePointerEnd}
+    >
       {/* 9:16のコンテナ。画面高さを超えないように調整 */}
       <div 
-        className="relative w-full max-w-[56.25vh] aspect-[9/16] bg-zinc-900"
+        className="relative w-full max-w-[56.25vh] aspect-[9/16] bg-zinc-900 overflow-hidden"
       >
         <video
           ref={videoRef}
@@ -53,6 +91,7 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) 
           muted
           onClick={(e) => e.currentTarget.play()}
           className="absolute inset-0 w-full h-full object-cover"
+          style={{ transform: `scale(${zoom})` }}
         />
 
         {/* ポリゴンクリップパスオーバーレイ */}

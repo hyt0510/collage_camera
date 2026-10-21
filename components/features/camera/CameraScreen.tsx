@@ -7,6 +7,7 @@ import { CapturePreviewDialog } from "./CapturePreviewDialog";
 import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
+import { getCameraSourceRect } from "@/lib/utils/camera";
 
 type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -38,6 +39,7 @@ export function CameraScreen({
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>("pending");
   const [showFlash, setShowFlash] = useState(false);
@@ -166,7 +168,8 @@ export function CameraScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, width, height);
+    const { sx, sy, sw, sh } = getCameraSourceRect(width, height, zoom);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
 
     // 圧縮
     const MAX = 800;
@@ -185,12 +188,13 @@ export function CameraScreen({
     setTimeout(() => setShowFlash(false), 250);
 
     setCapturedImage(dataUrl);
-  }, []);
+  }, [zoom]);
 
   // カメラ切替
   const handleToggleCamera = useCallback(() => {
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
     setTorchEnabled(false);
+    setZoom(1);
   }, []);
 
   // フラッシュ切替
@@ -292,7 +296,7 @@ export function CameraScreen({
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
         <>
-          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} />
+          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} onZoomChange={setZoom} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
           <div className="absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
