@@ -46,7 +46,7 @@ export function CameraControls({
   };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 pb-8 pt-6 px-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+    <div className="pointer-events-none absolute bottom-0 left-0 right-0 pb-8 pt-6 px-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
       {albumError && (
         <p className="mb-3 rounded-sm bg-white px-3 py-2 text-center text-xs font-bold text-rose-700 shadow">
           {albumError}
@@ -56,7 +56,7 @@ export function CameraControls({
       <div className="flex justify-end mb-4">
         <button
           onClick={onToggleGrid}
-          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all ${
+          className={`pointer-events-auto w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all ${
             showGrid ? "bg-white/25 text-white" : "bg-white/10 text-white/50"
           }`}
           aria-label="グリッド切替"
@@ -76,7 +76,7 @@ export function CameraControls({
         {/* アルバムから選択 */}
         <div className="relative w-14 h-14">
           <button
-            className="w-14 h-14 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
+            className="pointer-events-auto w-14 h-14 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
             style={{ transform: "rotate(-3deg)" }}
             aria-label="アルバムから選択"
           >
@@ -91,14 +91,14 @@ export function CameraControls({
             type="file"
             accept="image/*"
             onChange={handleAlbumFile}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            className="pointer-events-auto absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
         </div>
 
         {/* シャッターボタン */}
         <button
           onClick={onShutter}
-          className="relative w-[80px] h-[80px] rounded-full flex items-center justify-center active:animate-shutter-pulse"
+          className="pointer-events-auto relative w-[80px] h-[80px] rounded-full flex items-center justify-center active:animate-shutter-pulse"
           aria-label="撮影"
         >
           {/* 外リング (少しずらして手書き風に) */}
@@ -122,7 +122,7 @@ export function CameraControls({
           {flashSupported && (
             <button
               onClick={onToggleFlash}
-              className={`w-12 h-12 flex items-center justify-center transition-all active:scale-95 shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] border-2 ${
+              className={`pointer-events-auto w-12 h-12 flex items-center justify-center transition-all active:scale-95 shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] border-2 ${
                 flashEnabled ? "bg-yellow-400 text-yellow-900 border-yellow-200" : "bg-zinc-800 text-white border-white"
               }`}
               style={{ transform: "rotate(2deg)" }}
@@ -141,7 +141,7 @@ export function CameraControls({
           )}
           <button
             onClick={onToggleCamera}
-            className="w-12 h-12 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
+            className="pointer-events-auto w-12 h-12 bg-zinc-800 border-2 border-white flex items-center justify-center text-white active:scale-95 transition-transform shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]"
             style={{ transform: "rotate(-2deg)" }}
             aria-label="カメラ切替"
           >
