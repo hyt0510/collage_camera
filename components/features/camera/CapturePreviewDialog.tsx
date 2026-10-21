@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { CollageBackground } from "../collage/CollageBackground";
 
 interface Props {
@@ -9,10 +9,12 @@ interface Props {
   slotColor: string;
   clipPath?: string;
   onRetake: () => void;
-  onUse: () => void;
+  onUse: (image: HTMLImageElement) => void;
+  error?: string;
 }
 
-export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath, onRetake, onUse }: Props) {
+export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath, onRetake, onUse, error }: Props) {
+  const imageRef = useRef<HTMLImageElement>(null);
   return (
     <div className="absolute inset-0 bg-zinc-50 flex flex-col animate-preview-in p-6 pt-16 z-50 overflow-hidden">
       <CollageBackground variant="minimal" />
@@ -20,7 +22,6 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 min-h-0 py-4 mt-4">
         <div 
           className="scrapbook-photo relative mx-auto h-full max-h-[55vh] aspect-[9/16]"
-          style={{ transform: "rotate(-2deg)" }}
         >
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-6 rotate-3 masking-tape opacity-90 z-10" style={{ backgroundColor: slotColor }} />
           
@@ -30,6 +31,7 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              ref={imageRef}
               src={imageDataUrl}
               alt="撮影した写真"
               className="absolute inset-0 w-full h-full object-cover"
@@ -44,6 +46,7 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
       </div>
 
       {/* アクションボタン */}
+      {error && <p role="alert" className="relative z-10 text-center text-sm text-red-700">{error}</p>}
       <div className="py-6 flex gap-4 mt-auto relative z-10">
         <button
           onClick={onRetake}
@@ -53,7 +56,9 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
           撮り直す
         </button>
         <button
-          onClick={onUse}
+          onClick={() => {
+            if (imageRef.current?.complete && imageRef.current.naturalWidth > 0) onUse(imageRef.current);
+          }}
           className="flex-1 py-4 text-zinc-900 font-bold text-sm shadow-[3px_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-1 active:translate-x-1 active:shadow-none transition-all border-2 border-black bg-white"
           style={{ transform: "rotate(1deg)" }}
         >

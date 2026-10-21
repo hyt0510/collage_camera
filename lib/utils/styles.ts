@@ -29,6 +29,20 @@ export function toSvgPolygonPoints(clipPath: string): string {
     .join(" ");
 }
 
+/** 枠を拡大せず中央へ移し、写真を元の位置へ戻すための移動量も返す */
+export function getCenteredPolygon(clipPath: string) {
+  if (!clipPath) return { clipPath, offsetX: 0, offsetY: 0 };
+  const box = getPolygonBoundingBox(clipPath);
+  const offsetX = 50 - box.left - box.width / 2;
+  const offsetY = 50 - box.top - box.height / 2;
+  const points = clipPath.replace(/polygon\((.*)\)/, "$1").split(",");
+  const centered = points.map(point => {
+    const [x, y] = point.trim().split(/\s+/).map(parseFloat);
+    return `${x + offsetX}% ${y + offsetY}%`;
+  });
+  return { clipPath: `polygon(${centered.join(", ")})`, offsetX, offsetY };
+}
+
 /**
  * ポリゴンの中心座標（重心）を計算する
  */

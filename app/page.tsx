@@ -35,6 +35,7 @@ export default function Home() {
   const [isPrizeScannerOpen, setIsPrizeScannerOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const collageFrameRef = useRef<HTMLDivElement>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // 選択中のテーマ情報
@@ -319,6 +320,7 @@ export default function Home() {
                 <section className="relative z-10 flex flex-1 min-h-[320px] flex-col items-center gap-1">
                   <div className="flex-1 min-h-0 w-full">
                     <CollageFrame
+                      frameRef={collageFrameRef}
                       template={template}
                       images={images}
                       themeMap={themeMap}
@@ -442,6 +444,13 @@ export default function Home() {
       {/* アプリ内カメラオーバーレイ */}
       {isCameraOpen && selectedSlotId && selectedTheme && template && (
         <CameraScreen
+          getTargetRect={() => {
+            const frame = collageFrameRef.current;
+            if (!frame) return null;
+            const rect = frame.getBoundingClientRect();
+            return { left: rect.left + frame.clientLeft, top: rect.top + frame.clientTop,
+              width: frame.clientWidth, height: frame.clientHeight };
+          }}
           theme={selectedTheme}
           capturedCount={template.polygons.filter(p => images[p.id]).length}
           totalCount={template.polygons.length}

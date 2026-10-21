@@ -5,6 +5,10 @@ import { CameraPreview } from "./CameraPreview";
 import { CameraControls } from "./CameraControls";
 import { CapturePreviewDialog } from "./CapturePreviewDialog";
 import { CameraPermissionError } from "./CameraPermissionError";
+import { getCenteredPolygon } from "@/lib/utils/styles";
+import { createSlotPhoto } from "@/lib/utils/image";
+
+type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
 interface CameraScreenProps {
   theme: string;
@@ -12,6 +16,7 @@ interface CameraScreenProps {
   totalCount: number;
   slotColor: string;
   clipPath?: string;
+  getTargetRect?: () => FrameRect | null;
   onCapture: (dataUrl: string) => void;
   onClose: () => void;
 }
@@ -24,6 +29,7 @@ export function CameraScreen({
   totalCount,
   slotColor,
   clipPath,
+  getTargetRect,
   onCapture,
   onClose,
 }: CameraScreenProps) {
@@ -36,7 +42,31 @@ export function CameraScreen({
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>("pending");
   const [showFlash, setShowFlash] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [pasting, setPasting] = useState<{
+    dataUrl: string;
+    from: FrameRect;
+    to: FrameRect;
+    complete: () => void;
+  } | null>(null);
+  const pasteRef = useRef<HTMLImageElement>(null);
+  const confirmingRef = useRef(false);
+  const centeredPolygon = getCenteredPolygon(clipPath ?? "");
+
+  useEffect(() => {
+    if (!pasting || !pasteRef.current) return;
+    const animation = pasteRef.current.animate([
+      { left: `${pasting.from.left}px`, top: `${pasting.from.top}px`, width: `${pasting.from.width}px`, height: `${pasting.from.height}px` },
+      { left: `${pasting.to.left}px`, top: `${pasting.to.top}px`, width: `${pasting.to.width}px`, height: `${pasting.to.height}px` },
+    ], {
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "forwards",
+    });
+    animation.onfinish = pasting.complete;
+    return () => animation.cancel();
+  }, [pasting]);
+
   const streamRef = useRef<MediaStream | null>(null);
 
   // ストリーム停止ユーティリティ
@@ -188,15 +218,36 @@ export function CameraScreen({
   // 撮り直す
   const handleRetake = useCallback(() => {
     setCapturedImage(null);
+    setPreviewError("");
   }, []);
 
   // この写真を使用
-  const handleUsePhoto = useCallback(() => {
-    if (capturedImage) {
+  const handleUsePhoto = useCallback((image: HTMLImageElement) => {
+    if (!capturedImage || confirmingRef.current) return;
+    confirmingRef.current = true;
+    try {
+      const dataUrl = createSlotPhoto(image, clipPath ?? "");
+      const rect = image.getBoundingClientRect();
+      const target = getTargetRect?.();
       stopStream();
-      onCapture(capturedImage);
+      if (!target) {
+        onCapture(dataUrl);
+        return;
+      }
+      // 元の枠の位置に補正した画像を、中央のプレビュー位置から配置先へ運ぶ
+      setPasting({
+        dataUrl,
+        from: { left: rect.left + centeredPolygon.offsetX * rect.width / 100,
+          top: rect.top + centeredPolygon.offsetY * rect.height / 100,
+          width: rect.width, height: rect.height },
+        to: target,
+        complete: () => onCapture(dataUrl),
+      });
+    } catch {
+      confirmingRef.current = false;
+      setPreviewError("写真を準備できませんでした。もう一度お試しください。");
     }
-  }, [capturedImage, onCapture, stopStream]);
+  }, [capturedImage, clipPath, getTargetRect, centeredPolygon.offsetX, centeredPolygon.offsetY, onCapture, stopStream]);
 
   // アルバムから選択（コントロール経由）
   const handleAlbumSelect = useCallback((dataUrl: string) => {
@@ -218,7 +269,7 @@ export function CameraScreen({
   const showError = permissionStatus === "denied" || permissionStatus === "not-supported" || permissionStatus === "error";
 
   return (
-    <div className="fixed inset-0 z-50 bg-black animate-camera-open" ref={videoRef as React.LegacyRef<HTMLDivElement>}>
+    <div className={`fixed inset-0 z-50 ${pasting ? "" : "bg-black animate-camera-open"}`}>
       {/* ローディング */}
       {permissionStatus === "pending" && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -296,15 +347,30 @@ export function CameraScreen({
       )}
 
       {/* 撮影後プレビュー */}
-      {capturedImage && (
+      {capturedImage && !pasting && (
         <CapturePreviewDialog
           imageDataUrl={capturedImage}
           theme={theme}
           slotColor={slotColor}
-          clipPath={clipPath}
+          clipPath={centeredPolygon.clipPath}
+          error={previewError}
           onRetake={handleRetake}
           onUse={handleUsePhoto}
         />
+      )}
+
+      {pasting && (
+        <>
+          <span role="status" className="sr-only">写真を枠にはめています</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={pasteRef}
+            src={pasting.dataUrl}
+            alt=""
+            className="fixed object-cover"
+            style={{ ...pasting.from, clipPath, WebkitClipPath: clipPath }}
+          />
+        </>
       )}
 
       {/* 閉じるボタン (エラー時以外の上部 fallback) */}
