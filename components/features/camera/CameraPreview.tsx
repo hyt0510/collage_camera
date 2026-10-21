@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { toSvgPolygonPoints } from "@/lib/utils/styles";
+import { getCenteredPolygon, toSvgPolygonPoints } from "@/lib/utils/styles";
 
 interface Props {
   stream: MediaStream | null;
@@ -12,6 +12,7 @@ interface Props {
 
 export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -65,7 +66,7 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) 
           <defs>
             <mask id="camera-cutout">
               <rect width="100" height="100" fill="white" />
-              <polygon points={toSvgPolygonPoints(clipPath)} fill="black" />
+              <polygon points={toSvgPolygonPoints(centeredClipPath)} fill="black" />
             </mask>
           </defs>
           {/* 外側を暗くするマスク */}
@@ -77,7 +78,7 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor }: Props) 
           />
           {/* 枠線 */}
           <polygon
-            points={toSvgPolygonPoints(clipPath)}
+            points={toSvgPolygonPoints(centeredClipPath)}
             fill="none"
             stroke={slotColor || "#ffffff"}
             strokeWidth="1.5"

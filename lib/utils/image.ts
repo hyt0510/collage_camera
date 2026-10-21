@@ -1,4 +1,5 @@
 import { FrameTemplate } from "@/lib/collage-config";
+import { getCenteredPolygon } from "@/lib/utils/styles";
 
 /**
  * デバッグログ付き画像処理ユーティリティ
@@ -115,6 +116,20 @@ export function getCoverSourceRect(imgW: number, imgH: number, destW: number, de
   // 画像の方が縦長 -> 上下をカット
   const sh = imgW / destRatio;
   return { sx: 0, sy: (imgH - sh) / 2, sw: imgW, sh };
+}
+
+/** 中央の撮影枠で合わせた写真を、既存の合成処理で同じ構図になる位置へ戻す */
+export function createSlotPhoto(image: HTMLImageElement, clipPath: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 450;
+  canvas.height = 800;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("写真を準備できませんでした。もう一度お試しください。");
+  const { sx, sy, sw, sh } = getCoverSourceRect(image.naturalWidth, image.naturalHeight, canvas.width, canvas.height);
+  const { offsetX, offsetY } = getCenteredPolygon(clipPath);
+  ctx.drawImage(image, sx, sy, sw, sh,
+    -offsetX * canvas.width / 100, -offsetY * canvas.height / 100, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 export async function generateCollageImage(

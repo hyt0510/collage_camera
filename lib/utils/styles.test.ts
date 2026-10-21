@@ -2,9 +2,34 @@ import { describe, expect, it } from "vitest";
 import {
   getPolygonBoundingBox,
   getPolygonCenter,
+  getCenteredPolygon,
   hexToRgba,
   toSvgPolygonPoints,
 } from "./styles";
+
+describe("getCenteredPolygon", () => {
+  it("左上の枠を形と大きさを保って中央に移す", () => {
+    expect(getCenteredPolygon("polygon(0% 0%, 40% 0%, 20% 30%)")).toEqual({
+      clipPath: "polygon(30% 35%, 70% 35%, 50% 65%)",
+      offsetX: 30,
+      offsetY: 35,
+    });
+  });
+
+  it("右下の枠は左上へ移す", () => {
+    expect(getCenteredPolygon("polygon(60% 70%, 100% 70%, 100% 100%, 60% 100%)")).toEqual({
+      clipPath: "polygon(30% 35%, 70% 35%, 70% 65%, 30% 65%)",
+      offsetX: -30,
+      offsetY: -35,
+    });
+  });
+
+  it("全面の枠と枠なしでは位置補正をしない", () => {
+    const clipPath = "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)";
+    expect(getCenteredPolygon(clipPath)).toEqual({ clipPath, offsetX: 0, offsetY: 0 });
+    expect(getCenteredPolygon("")).toEqual({ clipPath: "", offsetX: 0, offsetY: 0 });
+  });
+});
 
 describe("hexToRgba", () => {
   it("6桁の16進カラーを rgba に変換する", () => {

@@ -1,5 +1,6 @@
 
 import { FrameTemplate, getSlotLockId } from "@/lib/collage-config";
+import type { Ref } from "react";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
@@ -8,6 +9,7 @@ const getContrastColor = (hex: string) =>
   (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
 interface Props {
+  frameRef?: Ref<HTMLDivElement>;
   template: FrameTemplate;
   images: Record<string, string>;
   themeMap: Record<string, string>;
@@ -18,7 +20,7 @@ interface Props {
   presetId?: string | null;
 }
 
-export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [], presetId }: Props) {
+export function CollageFrame({ frameRef, template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [], presetId }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;
@@ -27,7 +29,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
   return (
     // 親の高さに合わせて 9:16 のまま縮む（一画面に収めるため、横幅ではなく高さを基準にする）
     <div className="mx-auto h-full w-fit rounded-[24px] bg-zinc-300 p-2 shadow-inner">
-      <div className="relative aspect-[9/16] h-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
+      <div ref={frameRef} className="relative aspect-[9/16] h-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
         {template.polygons.map((polygon, index) => {
           const image = images[polygon.id];
           const color = slotColorMap[polygon.id]!;
@@ -62,7 +64,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
             >
               {image && (
                 <div 
-                  className="absolute inset-0 animate-paste-in"
+                  className="absolute inset-0"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
