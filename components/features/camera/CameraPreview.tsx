@@ -11,21 +11,20 @@ interface Props {
   clipPath?: string;
   slotColor?: string;
   zoom: number;
-  rotation: 0 | 180;
   mirrored: boolean;
   onZoomChange: (zoom: number) => void;
 }
 
-export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, rotation, mirrored, onZoomChange }: Props) {
+export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, mirrored, onZoomChange }: Props) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef({ rotation, zoom });
+  const zoomRef = useRef(zoom);
   const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
 
   useEffect(() => {
-    drawing.current = { rotation, zoom };
-  }, [rotation, zoom]);
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   useEffect(() => {
     if (!mirrored || !stream) return;
@@ -49,7 +48,7 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
         const height = Math.max(1, Math.round(video.videoHeight * scale));
         if (canvas.width !== width) canvas.width = width;
         if (canvas.height !== height) canvas.height = height;
-        drawCameraFrame(context, video, drawing.current.rotation, drawing.current.zoom, true);
+        drawCameraFrame(context, video, 0, zoomRef.current, true);
         lastPaint = now;
         lastVideoTime = video.currentTime;
       }
@@ -136,7 +135,7 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
           onClick={(e) => e.currentTarget.play()}
           className="absolute inset-0 w-full h-full object-cover"
           aria-hidden={mirrored}
-          style={mirrored ? { opacity: 0, pointerEvents: "none" } : { transform: `rotate(${rotation}deg) scale(${zoom})` }}
+          style={mirrored ? { opacity: 0, pointerEvents: "none" } : { transform: `scale(${zoom})` }}
         />
         {mirrored && <canvas ref={canvasRef} role="img" aria-label="内カメラのプレビュー"
           className="pointer-events-none absolute inset-0 w-full h-full object-cover" />}
