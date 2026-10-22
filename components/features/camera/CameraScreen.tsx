@@ -9,7 +9,6 @@ import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
 import { useCameraRotation } from "@/hooks/useCameraRotation";
-import { CameraDiagnostics } from "@/components/features/camera/CameraDiagnostics";
 
 type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -38,9 +37,7 @@ export function CameraScreen({
 }: CameraScreenProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
-  const { rotation: automaticRotation, needsSensor, sensorPermission, requestSensor, getSensorSample } = useCameraRotation(facingMode);
-  const [diagnosticRotation, setDiagnosticRotation] = useState<0 | 180 | null>(null);
-  const rotation = diagnosticRotation ?? automaticRotation;
+  const { rotation, needsSensor, requestSensor } = useCameraRotation(facingMode);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
@@ -212,7 +209,6 @@ export function CameraScreen({
     switchingRef.current = true;
     setPermissionStatus("pending");
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
-    setDiagnosticRotation(null);
     setTorchEnabled(false);
     setZoom(1);
   }, [facingMode, needsSensor, requestSensor]);
@@ -369,12 +365,6 @@ export function CameraScreen({
           />
         </>
       )}
-
-      <CameraDiagnostics videoRef={videoRef} stream={stream} requestedFacing={facingMode}
-        rotation={rotation} automaticRotation={automaticRotation} rotationOverride={diagnosticRotation}
-        onRotationOverride={setDiagnosticRotation} zoom={zoom}
-        sensorPermission={sensorPermission} onEnableSensor={requestSensor} getSensorSample={getSensorSample}
-        active={permissionStatus === "granted" && !capturedImage && !pasting} />
 
       {/* 撮影後プレビュー */}
       {capturedImage && !pasting && (
