@@ -311,11 +311,12 @@ export function CameraScreen({
 
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
-        <>
+        <div className="absolute inset-0 flex flex-col landscape:flex-row">
           <CameraPreview videoRef={videoRef} stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} mirrored={facingMode === "user"} onZoomChange={setZoom} />
 
-          {/* 上部オーバーレイ: テーマ表示 */}
-          <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
+          <div className="contents landscape:flex landscape:w-[38%] landscape:min-w-64 landscape:max-w-sm landscape:flex-col landscape:overflow-y-auto">
+          {/* テーマは映像と別の領域に配置する */}
+          <div className="pointer-events-none order-1 shrink-0 z-10 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] landscape:px-4 landscape:pt-4">
             <div className="flex items-start gap-3">
               {/* 戻るボタン */}
               <button
@@ -330,14 +331,14 @@ export function CameraScreen({
               </button>
 
               {/* テーマカード */}
-              <div className="flex-1 mt-1">
+              <div className="min-w-0 flex-1 mt-1">
                 <div 
                   className="rounded-sm px-4 py-3 shadow-md relative"
                   style={{ backgroundColor: "#fefce8", transform: "rotate(1deg)" }}
                 >
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-4 -rotate-2 masking-tape opacity-90" style={{ backgroundColor: slotColor }} />
                   <p className="text-[10px] font-bold text-zinc-500 tracking-wider">テーマ</p>
-                  <p className="text-base font-bold text-zinc-900 mt-0.5 leading-snug">{theme}</p>
+                  <p className="text-base font-bold text-zinc-900 mt-0.5 leading-snug break-words">{theme}</p>
                   <p className="text-[11px] text-zinc-500 mt-1.5 font-bold border-b border-zinc-200 inline-block pb-0.5">
                     {capturedCount} / {totalCount} 枚撮影済み
                   </p>
@@ -363,7 +364,8 @@ export function CameraScreen({
             showGrid={showGrid}
             slotColor={slotColor}
           />
-        </>
+          </div>
+        </div>
       )}
 
       {/* 撮影後プレビュー */}
