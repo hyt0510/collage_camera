@@ -38,7 +38,7 @@ export function CameraScreen({
 }: CameraScreenProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
-  const automaticRotation = useCameraRotation(facingMode);
+  const { rotation: automaticRotation, needsSensor, sensorPermission, requestSensor, getSensorSample } = useCameraRotation(facingMode);
   const [diagnosticRotation, setDiagnosticRotation] = useState<0 | 180 | null>(null);
   const rotation = diagnosticRotation ?? automaticRotation;
   const [torchEnabled, setTorchEnabled] = useState(false);
@@ -214,13 +214,14 @@ export function CameraScreen({
   // カメラ切替
   const handleToggleCamera = useCallback(() => {
     if (switchingRef.current) return;
+    if (facingMode === "environment" && needsSensor) void requestSensor();
     switchingRef.current = true;
     setPermissionStatus("pending");
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
     setDiagnosticRotation(null);
     setTorchEnabled(false);
     setZoom(1);
-  }, []);
+  }, [facingMode, needsSensor, requestSensor]);
 
   // フラッシュ切替
   const handleToggleFlash = useCallback(async () => {
@@ -378,6 +379,7 @@ export function CameraScreen({
       <CameraDiagnostics videoRef={videoRef} stream={stream} requestedFacing={facingMode}
         rotation={rotation} automaticRotation={automaticRotation} rotationOverride={diagnosticRotation}
         onRotationOverride={setDiagnosticRotation} zoom={zoom}
+        sensorPermission={sensorPermission} onEnableSensor={requestSensor} getSensorSample={getSensorSample}
         active={permissionStatus === "granted" && !capturedImage && !pasting} />
 
       {/* 撮影後プレビュー */}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createCameraSession, getPinchZoom, getCameraSourceRect, watchCameraOrientation, getCameraRotationCorrection } from "@/lib/utils/camera";
+import { createCameraSession, getPinchZoom, getCameraSourceRect, watchCameraOrientation, getCameraRotationCorrection, getCameraTiltAngle } from "@/lib/utils/camera";
 
 describe("iOS 26 の内カメラの上下補正", () => {
   const safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/26.0 Mobile/15E148 Safari/604.1";
@@ -17,6 +17,12 @@ describe("iOS 26 の内カメラの上下補正", () => {
     expect(getCameraRotationCorrection("environment", 270, safari)).toBe(0);
   });
 
+  it("画面角度0度でも実機で確認した横向きの内カメラを180度補正する", () => {
+    const angle = getCameraTiltAngle(0.3777591371503149, 80.07189540864353);
+    expect(getCameraRotationCorrection("user", angle ?? 0, safari)).toBe(180);
+    expect(getCameraRotationCorrection("environment", angle ?? 0, safari)).toBe(0);
+  });
+
   it("OSバージョンをそのまま報告するiOSブラウザにも対応する", () => {
     const chrome = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/140.0 Mobile/15E148 Safari/604.1";
     expect(getCameraRotationCorrection("user", 270, chrome)).toBe(180);
@@ -26,6 +32,27 @@ describe("iOS 26 の内カメラの上下補正", () => {
     expect(getCameraRotationCorrection("user", 90, safari.replace("Version/26.0", "Version/18.6"))).toBe(0);
     expect(getCameraRotationCorrection("user", 90, "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140.0")).toBe(0);
     expect(getCameraRotationCorrection("user", 90, "Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15")).toBe(0);
+  });
+});
+
+describe("画面角度に依存しないカメラの持ち方", () => {
+  it.each([[0.3777591371503149, 80.07189540864353], [179.12490403773924, -87.83267788209366], [0, -80]])(
+    "横向き beta=%s gamma=%s を判定する", (beta, gamma) => {
+      expect(getCameraTiltAngle(beta, gamma)).toBe(90);
+    },
+  );
+
+  it("実機の縦向きに戻したときは補正を解除する", () => {
+    expect(getCameraTiltAngle(44.724937069792205, 18.685291796308825, 90)).toBe(0);
+  });
+
+  it("下向き、斜め、欠測では直前の向きを保つ", () => {
+    expect(getCameraTiltAngle(0, 0, 90)).toBe(90);
+    expect(getCameraTiltAngle(180, 0, 90)).toBe(90);
+    expect(getCameraTiltAngle(35.264, 45, 90)).toBe(90);
+    expect(getCameraTiltAngle(null, 80, 90)).toBe(90);
+    expect(getCameraTiltAngle(0, Number.NaN)).toBeNull();
+    expect(getCameraTiltAngle(0, 0)).toBeNull();
   });
 });
 
