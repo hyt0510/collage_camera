@@ -9,6 +9,19 @@ export function getCameraRotationCorrection(
   return facing === "user" && isiOS26 && (normalizedAngle === 90 || normalizedAngle === 270) ? 180 : 0;
 }
 
+/** 重力の画面内成分で縦横を判定し、下向きや境界付近では直前の向きを保つ。 */
+export function getCameraTiltAngle(
+  beta: number | null, gamma: number | null, previous: 0 | 90 | null = null,
+): 0 | 90 | null {
+  if (beta === null || gamma === null || !Number.isFinite(beta) || !Number.isFinite(gamma)) return previous;
+  const b = beta * Math.PI / 180;
+  const g = gamma * Math.PI / 180;
+  const horizontal = Math.abs(Math.cos(b) * Math.sin(g));
+  const vertical = Math.abs(Math.sin(b));
+  if (Math.hypot(horizontal, vertical) < 0.25 || Math.abs(horizontal - vertical) < 0.15) return previous;
+  return horizontal > vertical ? 90 : 0;
+}
+
 /** 向き変更の通知をまとめ、画面更新後にカメラの向きを再取得する。 */
 export function watchCameraOrientation(onChange: () => void) {
   let frame: number | null = null;
