@@ -104,7 +104,7 @@ async function uploadImage(image: DecodedImage, path: string, isPublic: boolean)
  * 投稿枠を1つ確保する。上限超過や連続投稿なら SubmissionLimitError を投げる
  * 検閲や画像保存の前に呼び、荒らしによる課金APIやStorageの消費を防ぐ
  */
-export async function reserveSubmissionQuota(userId: string): Promise<void> {
+export async function reserveSubmissionQuota(userId: string, presetId?: string): Promise<void> {
   const ref = db.collection(QUOTA_COLLECTION).doc(userId);
   await db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -112,7 +112,8 @@ export async function reserveSubmissionQuota(userId: string): Promise<void> {
     const lastAt = (snapshot.get("lastAt") as number | undefined) ?? 0;
     const now = Date.now();
 
-    if (count >= MAX_SUBMISSIONS_PER_USER) throw new SubmissionLimitError("limit");
+    // デモ用だけ投稿回数を無制限にし、連続投稿の間隔は維持する。
+    if (presetId !== "pre-festival-home" && count >= MAX_SUBMISSIONS_PER_USER) throw new SubmissionLimitError("limit");
     if (now - lastAt < MIN_SUBMISSION_INTERVAL_MS) throw new SubmissionLimitError("too_soon");
 
     tx.set(ref, { count: count + 1, lastAt: now }, { merge: true });

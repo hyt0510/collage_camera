@@ -47,22 +47,6 @@ let hasNewSubmissions: boolean = false; // 新着投稿があったかどうか�
 const CACHE_MAX_TTL_MS = 30000; // 最長キャッシュ期間 (30秒)
 const CACHE_MIN_INTERVAL_MS = 5000; // 最短データ取得間隔 (5秒)
 
-// JSTの時間（9時〜17時）をチェックするヘルパー
-function checkIsEventTime(): boolean {
-  try {
-    const formatter = new Intl.DateTimeFormat("ja-JP", {
-      timeZone: "Asia/Tokyo",
-      hour: "numeric",
-      hour12: false,
-    });
-    const hours = parseInt(formatter.format(new Date()), 10);
-    return hours >= 9 && hours < 17; // JST 9:00 〜 16:59:59 の間のみ許可
-  } catch (e) {
-    console.error("Failed to check JST time, defaulting to true:", e);
-    return true; // 判定失敗時は安全側に倒して稼働させる
-  }
-}
-
 export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope");
@@ -94,17 +78,14 @@ export async function GET(request: Request) {
     }
 
     const now = Date.now();
-    const isEventTime = checkIsEventTime();
     
     // データ再取得が必要かどうかの判定
-    // JST 9時〜17時のイベント時間外である場合は、キャッシュが既に存在すればリフェッチをスキップしてFirestoreへのアクセスを防ぐ。
-    // キャッシュが空の場合は、画面が真っ白になるのを防ぐため、時間外でも初回1回のみ取得を許可する。
     const needsRefetch = 
       !cachedApprovedSubmissions || 
-      (isEventTime && (
+      (
         (now - lastFetchedApproved > CACHE_MAX_TTL_MS) ||
         (hasNewSubmissions && (now - lastFetchedApproved > CACHE_MIN_INTERVAL_MS))
-      ));
+      );
 
     if (needsRefetch) {
       const submissions = await listApprovedSubmissions();
@@ -120,7 +101,7 @@ export async function GET(request: Request) {
       hasNewSubmissions = false; // フラグをリセット
       console.log(`[API Cache] Fetched from Firestore (Reason: ${hasNewSubmissions ? 'New Submission' : 'TTL Expired'}). Next min refetch in ${CACHE_MIN_INTERVAL_MS / 1000}s`);
     } else {
-      console.log(`[API Cache] Serving cached submissions (Event Time: ${isEventTime}). Cache age: ${(now - lastFetchedApproved) / 1000}s`);
+      console.log(`[API Cache] Serving cached submissions. Cache age: ${(now - lastFetchedApproved) / 1000}s`);
     }
 
     return NextResponse.json({ submissions: cachedApprovedSubmissions });
@@ -133,14 +114,6 @@ export async function GET(request: Request) {
 
 
 export async function POST(request: Request) {
-  // JSTの時間（9時〜17時）をチェック
-  if (!checkIsEventTime()) {
-    return NextResponse.json(
-      { error: "イベント時間外（9:00〜17:00）のため、現在は新規投稿を受け付けていません。" },
-      { status: 403 }
-    );
-  }
-
   // 0. Firebase IDトークン検証
   const authResult = await verifyAuthToken(request);
   if (!authResult) {
@@ -168,7 +141,7 @@ export async function POST(request: Request) {
 
   // 2. 投稿回数の制限（検閲や画像保存より先に確認して、荒らしによる消費を防ぐ）
   try {
-    await reserveSubmissionQuota(userId);
+    await reserveSubmissionQuota(userId, body.presetId);
   } catch (error) {
     if (error instanceof SubmissionLimitError) {
       const message = error.reason === "limit"
