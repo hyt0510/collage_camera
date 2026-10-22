@@ -5,6 +5,7 @@ import { getCenteredPolygon, toSvgPolygonPoints } from "@/lib/utils/styles";
 import { getPinchZoom } from "@/lib/utils/camera";
 
 interface Props {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   stream: MediaStream | null;
   showGrid: boolean;
   clipPath?: string;
@@ -14,8 +15,7 @@ interface Props {
   onZoomChange: (zoom: number) => void;
 }
 
-export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, rotation, onZoomChange }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, rotation, onZoomChange }: Props) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
@@ -69,7 +69,7 @@ export function CameraPreview({ stream, showGrid, clipPath, slotColor, zoom, rot
       video.removeEventListener("loadedmetadata", startPlaying);
       // We don't set srcObject to null here to avoid AbortError on rapid remounts
     };
-  }, [stream]);
+  }, [stream, videoRef]);
 
   return (
     <div

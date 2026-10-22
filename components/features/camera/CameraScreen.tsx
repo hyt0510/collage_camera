@@ -9,6 +9,7 @@ import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
 import { useCameraRotation } from "@/hooks/useCameraRotation";
+import { CameraDiagnostics } from "@/components/features/camera/CameraDiagnostics";
 
 type FrameRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -53,6 +54,7 @@ export function CameraScreen({
     complete: () => void;
   } | null>(null);
   const pasteRef = useRef<HTMLImageElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const confirmingRef = useRef(false);
   const centeredPolygon = getCenteredPolygon(clipPath ?? "");
 
@@ -165,7 +167,7 @@ export function CameraScreen({
     if (!videoTrack) return;
 
     // video要素を取得してキャプチャ
-    const video = document.querySelector("video");
+    const video = videoRef.current;
     // カメラの映像が届く前に押されると真っ黒な写真になるため、準備ができるまで無視する
     if (!video || video.readyState < 2 || video.videoWidth === 0) return;
 
@@ -316,7 +318,7 @@ export function CameraScreen({
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
         <>
-          <CameraPreview stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} rotation={rotation} onZoomChange={setZoom} />
+          <CameraPreview videoRef={videoRef} stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} rotation={rotation} onZoomChange={setZoom} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
           <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
@@ -369,6 +371,9 @@ export function CameraScreen({
           />
         </>
       )}
+
+      <CameraDiagnostics videoRef={videoRef} stream={stream} requestedFacing={facingMode}
+        rotation={rotation} zoom={zoom} active={permissionStatus === "granted" && !capturedImage && !pasting} />
 
       {/* 撮影後プレビュー */}
       {capturedImage && !pasting && (
