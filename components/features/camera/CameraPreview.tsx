@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from "react";
 import { getCenteredPolygon, toSvgPolygonPoints } from "@/lib/utils/styles";
-import { getPinchZoom } from "@/lib/utils/camera";
+import { drawCameraFrame, getPinchZoom } from "@/lib/utils/camera";
 
 interface Props {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -19,7 +19,49 @@ interface Props {
 export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, rotation, mirrored, onZoomChange }: Props) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef({ rotation, zoom });
   const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
+
+  useEffect(() => {
+    drawing.current = { rotation, zoom };
+  }, [rotation, zoom]);
+
+  useEffect(() => {
+    if (!mirrored || !stream) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d", { alpha: false });
+    if (!video || !canvas || !context) return;
+    let stopped = false;
+    let callbackId = 0;
+    let lastPaint = -Infinity;
+    let lastVideoTime = -1;
+    const useVideoCallback = typeof video.requestVideoFrameCallback === "function";
+
+    const paint = (now: number) => {
+      if (stopped) return;
+      // 新しい映像だけを約30fps・長辺800pxで描画し、Reactの状態はフレームごとに更新しない。
+      if (now - lastPaint >= 30 && video.currentTime !== lastVideoTime
+        && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        const scale = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight));
+        const width = Math.max(1, Math.round(video.videoWidth * scale));
+        const height = Math.max(1, Math.round(video.videoHeight * scale));
+        if (canvas.width !== width) canvas.width = width;
+        if (canvas.height !== height) canvas.height = height;
+        drawCameraFrame(context, video, drawing.current.rotation, drawing.current.zoom, true);
+        lastPaint = now;
+        lastVideoTime = video.currentTime;
+      }
+      callbackId = useVideoCallback ? video.requestVideoFrameCallback(paint) : requestAnimationFrame(paint);
+    };
+    callbackId = useVideoCallback ? video.requestVideoFrameCallback(paint) : requestAnimationFrame(paint);
+    return () => {
+      stopped = true;
+      if (useVideoCallback) video.cancelVideoFrameCallback(callbackId);
+      else cancelAnimationFrame(callbackId);
+    };
+  }, [mirrored, stream, videoRef]);
 
   const getDistance = () => {
     const [first, second] = [...pointers.current.values()];
@@ -93,8 +135,11 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
           muted
           onClick={(e) => e.currentTarget.play()}
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ transform: `rotate(${rotation}deg) scale(${zoom}) scaleX(${mirrored ? -1 : 1})` }}
+          aria-hidden={mirrored}
+          style={mirrored ? { opacity: 0, pointerEvents: "none" } : { transform: `rotate(${rotation}deg) scale(${zoom})` }}
         />
+        {mirrored && <canvas ref={canvasRef} role="img" aria-label="内カメラのプレビュー"
+          className="pointer-events-none absolute inset-0 w-full h-full object-cover" />}
 
         {/* ポリゴンクリップパスオーバーレイ */}
         {clipPath && (
