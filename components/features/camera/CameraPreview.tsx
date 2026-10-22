@@ -12,10 +12,11 @@ interface Props {
   slotColor?: string;
   zoom: number;
   rotation: 0 | 180;
+  mirrored: boolean;
   onZoomChange: (zoom: number) => void;
 }
 
-export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, rotation, onZoomChange }: Props) {
+export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor, zoom, rotation, mirrored, onZoomChange }: Props) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; zoom: number } | null>(null);
   const centeredClipPath = getCenteredPolygon(clipPath ?? "").clipPath;
@@ -92,7 +93,7 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
           muted
           onClick={(e) => e.currentTarget.play()}
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ transform: `rotate(${rotation}deg) scale(${zoom})` }}
+          style={{ transform: `rotate(${rotation}deg) scale(${zoom}) scaleX(${mirrored ? -1 : 1})` }}
         />
 
         {/* ポリゴンクリップパスオーバーレイ */}

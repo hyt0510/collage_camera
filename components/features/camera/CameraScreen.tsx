@@ -322,7 +322,7 @@ export function CameraScreen({
       {/* カメラプレビュー */}
       {permissionStatus === "granted" && !capturedImage && (
         <>
-          <CameraPreview videoRef={videoRef} stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} rotation={rotation} onZoomChange={setZoom} />
+          <CameraPreview videoRef={videoRef} stream={stream} showGrid={showGrid} clipPath={clipPath} slotColor={slotColor} zoom={zoom} rotation={rotation} mirrored={facingMode === "user"} onZoomChange={setZoom} />
 
           {/* 上部オーバーレイ: テーマ表示 */}
           <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 pt-12 pb-6 px-5 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
