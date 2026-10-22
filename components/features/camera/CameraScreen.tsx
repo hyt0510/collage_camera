@@ -38,7 +38,9 @@ export function CameraScreen({
 }: CameraScreenProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
-  const rotation = useCameraRotation(facingMode);
+  const automaticRotation = useCameraRotation(facingMode);
+  const [diagnosticRotation, setDiagnosticRotation] = useState<0 | 180 | null>(null);
+  const rotation = diagnosticRotation ?? automaticRotation;
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
@@ -215,6 +217,7 @@ export function CameraScreen({
     switchingRef.current = true;
     setPermissionStatus("pending");
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
+    setDiagnosticRotation(null);
     setTorchEnabled(false);
     setZoom(1);
   }, []);
@@ -373,7 +376,9 @@ export function CameraScreen({
       )}
 
       <CameraDiagnostics videoRef={videoRef} stream={stream} requestedFacing={facingMode}
-        rotation={rotation} zoom={zoom} active={permissionStatus === "granted" && !capturedImage && !pasting} />
+        rotation={rotation} automaticRotation={automaticRotation} rotationOverride={diagnosticRotation}
+        onRotationOverride={setDiagnosticRotation} zoom={zoom}
+        active={permissionStatus === "granted" && !capturedImage && !pasting} />
 
       {/* 撮影後プレビュー */}
       {capturedImage && !pasting && (
