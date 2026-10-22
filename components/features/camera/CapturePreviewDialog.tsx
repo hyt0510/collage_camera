@@ -16,12 +16,12 @@ interface Props {
 export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath, onRetake, onUse, error }: Props) {
   const imageRef = useRef<HTMLImageElement>(null);
   return (
-    <div className="absolute inset-0 bg-zinc-50 flex flex-col gap-4 animate-preview-in px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] z-50 overflow-hidden landscape:flex-row">
+    <div className="absolute inset-0 bg-zinc-50 flex flex-col animate-preview-in p-6 pt-16 z-50 overflow-hidden landscape:flex-row landscape:gap-4 landscape:pt-[max(1.5rem,env(safe-area-inset-top))] landscape:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <CollageBackground variant="minimal" />
       {/* プレビュー画像（スクラップブック風） */}
-      <div className="flex-1 flex items-center justify-center relative z-10 min-h-0 min-w-0" style={{ containerType: "size" }}>
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 min-h-0 py-4 mt-4 landscape:flex-row landscape:min-w-0 landscape:py-0 landscape:mt-0 landscape:[container-type:size]">
         <div 
-          className="scrapbook-photo relative mx-auto w-[min(100cqw,calc(56.25cqh-1.5rem))] aspect-[9/16]"
+          className="scrapbook-photo relative mx-auto h-full max-h-[55vh] aspect-[9/16] landscape:h-auto landscape:max-h-none landscape:w-[min(100cqw,calc(56.25cqh-1.5rem))]"
         >
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-6 rotate-3 masking-tape opacity-90 z-10" style={{ backgroundColor: slotColor }} />
           
@@ -37,16 +37,19 @@ export function CapturePreviewDialog({ imageDataUrl, theme, slotColor, clipPath,
               className="absolute inset-0 w-full h-full object-cover"
             />
           </div>
-          
+          {/* 縦向きでは従来どおり写真の下にテーマを添える */}
+          <div className="absolute -bottom-10 left-0 right-0 text-center w-full landscape:hidden">
+            <p className="text-xl font-bold text-zinc-800 whitespace-nowrap">{theme}</p>
+          </div>
         </div>
       </div>
 
-      <div className="relative z-10 shrink-0 flex flex-col gap-4 landscape:w-[38%] landscape:min-w-64 landscape:max-w-sm landscape:overflow-y-auto">
-      {/* テーマは写真の高さに含めず、専用の領域で折り返す */}
-      <p className="text-center text-xl font-bold text-zinc-800 break-words">{theme}</p>
+      <div className="contents landscape:relative landscape:z-10 landscape:shrink-0 landscape:flex landscape:flex-col landscape:gap-4 landscape:w-[38%] landscape:min-w-64 landscape:max-w-sm landscape:overflow-y-auto">
+      {/* 横向きではテーマを右側の専用領域で折り返す */}
+      <p className="hidden text-center text-xl font-bold text-zinc-800 break-words landscape:block">{theme}</p>
       {/* アクションボタン */}
       {error && <p role="alert" className="relative z-10 text-center text-sm text-red-700">{error}</p>}
-      <div className="py-2 flex gap-4 mt-auto relative z-10 landscape:flex-col">
+      <div className="py-6 flex gap-4 mt-auto relative z-10 landscape:flex-col landscape:py-2">
         <button
           onClick={onRetake}
           className="flex-1 py-4 bg-white text-zinc-700 font-bold text-sm border-2 border-dashed border-zinc-400 active:scale-95 transition-transform"
