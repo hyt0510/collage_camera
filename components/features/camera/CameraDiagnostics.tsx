@@ -8,9 +8,20 @@ interface Props {
   stream: MediaStream | null;
   requestedFacing: "user" | "environment";
   rotation: 0 | 180;
+  automaticRotation: 0 | 180;
+  rotationOverride: 0 | 180 | null;
+  onRotationOverride: (rotation: 0 | 180 | null) => void;
   zoom: number;
   active: boolean;
 }
+
+type SensorPermission = "not-requested" | "requesting" | "granted" | "denied" | "unsupported" | "error";
+type PhysicalOrientation = Pick<DeviceOrientationEvent, "alpha" | "beta" | "gamma" | "absolute">;
+
+const permissionLabels: Record<SensorPermission, string> = {
+  "not-requested": "未許可", requesting: "確認中", granted: "許可済み",
+  denied: "拒否", unsupported: "非対応", error: "取得失敗",
+};
 
 interface DiagnosticSample {
   requestedFacing: string;
@@ -27,19 +38,60 @@ interface DiagnosticSample {
   videoTime: number;
   videoTransform: string;
   rotation: number;
+  automaticRotation: number;
+  rotationSource: "automatic" | "manual";
+  sensorPermission: SensorPermission;
+  deviceOrientation: PhysicalOrientation | null;
+  sensorAgeMs: number | null;
+  standalone: boolean;
   zoom: number;
   userAgent: string;
 }
 
-export function CameraDiagnostics({ videoRef, stream, requestedFacing, rotation, zoom, active }: Props) {
+export function CameraDiagnostics({ videoRef, stream, requestedFacing, rotation, automaticRotation,
+  rotationOverride, onRotationOverride, zoom, active }: Props) {
   const [enabled] = useState(() => typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("cameraDebug") === "1");
   const [open, setOpen] = useState(false);
   const [samples, setSamples] = useState<DiagnosticSample[]>([]);
   const [images, setImages] = useState<{ raw: string; corrected: string } | null>(null);
   const [message, setMessage] = useState("");
+  const [sensorPermission, setSensorPermission] = useState<SensorPermission>("not-requested");
+  const physicalOrientation = useRef<PhysicalOrientation | null>(null);
+  const sensorTime = useRef<number | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const rawVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!enabled || sensorPermission !== "granted") return;
+    const update = (event: DeviceOrientationEvent) => {
+      if (event.beta === null && event.gamma === null) return;
+      physicalOrientation.current = {
+        alpha: event.alpha, beta: event.beta, gamma: event.gamma, absolute: event.absolute,
+      };
+      sensorTime.current = performance.now();
+    };
+    window.addEventListener("deviceorientation", update);
+    return () => window.removeEventListener("deviceorientation", update);
+  }, [enabled, sensorPermission]);
+
+  const enableSensor = async () => {
+    if (typeof DeviceOrientationEvent === "undefined") {
+      setSensorPermission("unsupported");
+      return;
+    }
+    const api = DeviceOrientationEvent as typeof DeviceOrientationEvent & {
+      requestPermission?: () => Promise<"granted" | "denied">;
+    };
+    setSensorPermission("requesting");
+    try {
+      // iOS の許可要求はボタン操作から直接呼び、ページ表示だけでは要求しない。
+      const permission = api.requestPermission ? await api.requestPermission() : "granted";
+      setSensorPermission(permission);
+    } catch {
+      setSensorPermission("error");
+    }
+  };
 
   useEffect(() => {
     if (!enabled || !open) return;
@@ -96,6 +148,11 @@ export function CameraDiagnostics({ videoRef, stream, requestedFacing, rotation,
       trackWidth: settings.width ?? null, trackHeight: settings.height ?? null,
       readyState: video.readyState, videoTime: Math.round(video.currentTime * 1000) / 1000,
       videoTransform: getComputedStyle(video).transform, rotation, zoom,
+      automaticRotation, rotationSource: rotationOverride === null ? "automatic" : "manual",
+      sensorPermission, deviceOrientation: physicalOrientation.current,
+      sensorAgeMs: sensorTime.current === null ? null : Math.round(performance.now() - sensorTime.current),
+      standalone: window.matchMedia("(display-mode: standalone)").matches
+        || (navigator as Navigator & { standalone?: boolean }).standalone === true,
       userAgent: navigator.userAgent,
     };
     setSamples(previous => [...previous.slice(-5), sample]);
@@ -123,6 +180,7 @@ export function CameraDiagnostics({ videoRef, stream, requestedFacing, rotation,
           className="rounded bg-white px-3 py-2 text-sm font-bold text-black disabled:opacity-50">
           カメラ診断を記録
         </button>
+        {rotationOverride !== null && <p className="mt-1 bg-black/80 p-1 text-xs text-white">診断：手動補正 {rotation}°</p>}
         {!open && message && <p role="status" className="mt-1 bg-black/80 p-1 text-xs text-white">{message}</p>}
       </div>}
       <dialog ref={dialogRef} aria-label="カメラ診断" onCancel={() => setOpen(false)}
@@ -132,6 +190,24 @@ export function CameraDiagnostics({ videoRef, stream, requestedFacing, rotation,
           <button type="button" onClick={() => setOpen(false)} className="rounded bg-white px-3 py-2 text-sm text-black">診断を閉じる</button>
         </header>
         <p className="mb-3 text-sm">同じ持ち方で内・外カメラを記録してください。直近6件を保持します。</p>
+        <div className="mb-3 rounded border border-zinc-600 p-3 text-sm">
+          <button type="button" onClick={enableSensor}
+            disabled={sensorPermission === "granted" || sensorPermission === "requesting"}
+            className="rounded bg-white px-3 py-2 text-black disabled:opacity-50">傾きセンサーを有効にする</button>
+          <p className="mt-2">センサー：{permissionLabels[sensorPermission]}</p>
+          <p className="mt-1">許可後、比較したい持ち方にして再記録してください。</p>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="診断用の回転比較">
+            <button type="button" onClick={() => onRotationOverride(null)} aria-pressed={rotationOverride === null}
+              className="rounded border px-3 py-2 aria-pressed:bg-white aria-pressed:text-black">自動補正に戻す</button>
+            <button type="button" onClick={() => onRotationOverride(0)} aria-pressed={rotationOverride === 0}
+              className="rounded border px-3 py-2 aria-pressed:bg-white aria-pressed:text-black">診断で0度にする</button>
+            <button type="button" onClick={() => onRotationOverride(180)} aria-pressed={rotationOverride === 180}
+              className="rounded border px-3 py-2 aria-pressed:bg-white aria-pressed:text-black">診断で180度にする</button>
+          </div>
+          <p className="mt-2">現在：{rotationOverride === null ? "自動" : "手動"} {rotation}°。比較値は撮影にも適用し、カメラ切替時に自動へ戻します。</p>
+          <button type="button" onClick={record} disabled={!stream}
+            className="mt-2 rounded bg-white px-3 py-2 font-bold text-black disabled:opacity-50">現在の状態を再記録</button>
+        </div>
         {latest && <p className="mb-3 text-sm">
           記録時：{latest.requestedFacing === "user" ? "内カメラ" : "外カメラ"}（取得：{latest.actualFacing}）／
           画面 {latest.screenAngle ?? latest.legacyScreenAngle ?? "不明"}°／補正 {latest.rotation}°／
