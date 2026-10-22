@@ -46,14 +46,14 @@ export function CameraControls({
   };
 
   return (
-    <div className="pointer-events-none order-3 shrink-0 px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] landscape:mt-auto landscape:px-4 landscape:pt-2 landscape:pb-4">
+    <div className="pointer-events-none absolute bottom-0 left-0 right-0 pb-8 pt-6 px-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent landscape:static landscape:shrink-0 landscape:mt-auto landscape:px-4 landscape:pt-2 landscape:pb-4 landscape:bg-none">
       {albumError && (
         <p className="mb-3 rounded-sm bg-white px-3 py-2 text-center text-xs font-bold text-rose-700 shadow">
           {albumError}
         </p>
       )}
       {/* 上段: グリッドトグル */}
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-end mb-4 landscape:mb-2">
         <button
           onClick={onToggleGrid}
           className={`pointer-events-auto w-10 h-10 rounded-full flex items-center justify-center text-sm transition-all ${
