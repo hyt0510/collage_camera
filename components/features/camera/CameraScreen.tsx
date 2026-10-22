@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { CameraPreview } from "./CameraPreview";
 import { CameraControls } from "./CameraControls";
 import { CapturePreviewDialog } from "./CapturePreviewDialog";
-import { createCameraSession, getCameraSourceRect, watchCameraOrientation } from "@/lib/utils/camera";
+import { createCameraSession, drawCameraFrame, watchCameraOrientation } from "@/lib/utils/camera";
 import { CameraPermissionError } from "./CameraPermissionError";
 import { getCenteredPolygon } from "@/lib/utils/styles";
 import { createSlotPhoto } from "@/lib/utils/image";
@@ -184,13 +184,7 @@ export function CameraScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // プレビューと同じ補正を焼き込み、撮影後だけ上下が変わるのを防ぐ。
-    if (rotation === 180) {
-      ctx.translate(width, height);
-      ctx.rotate(Math.PI);
-    }
-    const { sx, sy, sw, sh } = getCameraSourceRect(width, height, zoom);
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+    drawCameraFrame(ctx, video, rotation, zoom);
 
     // 圧縮
     const MAX = 800;

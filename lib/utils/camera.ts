@@ -57,6 +57,27 @@ export function getCameraSourceRect(width: number, height: number, zoom: number)
   return { sx: (width - sw) / 2, sy: (height - sh) / 2, sw, sh };
 }
 
+/** プレビューと撮影で同じ切り出し・回転を使い、鏡表示はプレビューだけに適用する。 */
+export function drawCameraFrame(
+  context: CanvasRenderingContext2D, video: HTMLVideoElement,
+  rotation: 0 | 180, zoom: number, mirrored = false,
+) {
+  const { width, height } = context.canvas;
+  context.save();
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  if (mirrored) {
+    context.translate(width, 0);
+    context.scale(-1, 1);
+  }
+  if (rotation === 180) {
+    context.translate(width, height);
+    context.rotate(Math.PI);
+  }
+  const { sx, sy, sw, sh } = getCameraSourceRect(video.videoWidth, video.videoHeight, zoom);
+  context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+  context.restore();
+}
+
 /** 起動の応答順にかかわらず、最後に要求されたカメラだけを使う。 */
 export function createCameraSession() {
   let generation = 0;
