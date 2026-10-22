@@ -115,8 +115,8 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
 
   return (
     <div
-      className="absolute inset-0 bg-black flex items-center justify-center overflow-hidden"
-      style={{ touchAction: "none" }}
+      className="relative order-2 min-h-0 min-w-0 flex-1 bg-black flex items-center justify-center overflow-hidden landscape:order-none"
+      style={{ touchAction: "none", containerType: "size" }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
@@ -125,7 +125,7 @@ export function CameraPreview({ videoRef, stream, showGrid, clipPath, slotColor,
     >
       {/* 9:16のコンテナ。画面高さを超えないように調整 */}
       <div 
-        className="relative w-full max-w-[56.25vh] aspect-[9/16] bg-zinc-900 overflow-hidden"
+        className="relative w-[min(100cqw,56.25cqh)] aspect-[9/16] bg-zinc-900 overflow-hidden"
       >
         <video
           ref={videoRef}

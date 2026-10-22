@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { usePortraitViewport } from "@/hooks/usePortraitViewport";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
@@ -20,7 +19,6 @@ import { PrizeTicketScreen } from "@/components/features/prize/PrizeTicketScreen
 import { parsePrizeCode } from "@/lib/utils/prize";
 
 export default function Home() {
-  const portraitStyle = usePortraitViewport();
   const { user, loading: authLoading, error: authError } = useAuth();
 
   const {
@@ -161,7 +159,7 @@ export default function Home() {
   // 認証中のローディング表示
   if (authLoading) {
     return (
-      <main style={portraitStyle} className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
         <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
         <p className="text-sm text-zinc-500">準備中...</p>
       </main>
@@ -171,7 +169,7 @@ export default function Home() {
   // 認証エラー表示
   if (authError) {
     return (
-      <main style={portraitStyle} className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-4 bg-zinc-50">
         <div className="rounded-2xl bg-rose-50 p-6 border border-rose-200 text-center">
           <p className="text-rose-700 font-bold">認証エラー</p>
           <p className="mt-2 text-sm text-rose-600">{authError}</p>
@@ -211,7 +209,6 @@ export default function Home() {
   return (
     // 作成タブ（完了画面を含む）は画面の高さちょうどに収める。小さい端末では main の中でスクロールする
     <main
-      style={portraitStyle}
       className={`relative mx-auto flex w-full max-w-md flex-col gap-2 px-4 py-3 bg-zinc-50 ${
         activeTab === "create" ? "h-dvh overflow-y-auto" : "min-h-dvh"
       }`}
@@ -449,8 +446,6 @@ export default function Home() {
       {isCameraOpen && selectedSlotId && selectedTheme && template && createPortal(
         <CameraScreen
           getTargetRect={() => {
-            // 回転した作成画面への貼り付けは、座標系が異なるため直接反映する。
-            if (portraitStyle) return null;
             const frame = collageFrameRef.current;
             if (!frame) return null;
             const rect = frame.getBoundingClientRect();
