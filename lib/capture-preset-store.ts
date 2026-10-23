@@ -77,6 +77,16 @@ export async function getActiveCapturePreset() {
   return buildActivePreset(await loadActivePresetId());
 }
 
+/** 景品資格の確定には、古いキャッシュや障害時の既定値を使わない。 */
+export async function getSubmissionCapturePreset() {
+  const snapshot = await db.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
+  // 設定を一度も保存していない環境では、参加者画面と同じ既定のお題で受け付ける
+  if (snapshot.exists === false) return buildActivePreset(DEFAULT_PRESET_ID);
+  const presetId = snapshot.get("presetId");
+  if (typeof presetId !== "string" || !getPresetById(presetId)) return null;
+  return buildActivePreset(presetId);
+}
+
 /**
  * 存在しないプリセットなら null を返す。Firestore への保存に失敗したら例外を投げる
  */

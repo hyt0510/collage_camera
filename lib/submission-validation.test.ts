@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { FRAME_TEMPLATES, CAPTURE_PRESETS, buildThemeMapFromPreset } from "@/lib/collage-config";
 
 // server-only はサーバー外で import すると例外を投げるため、テストでは空にする
 vi.mock("server-only", () => ({}));
@@ -19,7 +20,7 @@ function validBody(overrides: Record<string, unknown> = {}) {
     templateId: "shards-a",
     presetId: "festival-classic-a",
     collageDataUrl: dataUrl("image/webp", WEBP_HEADER),
-    items: [{ polygonId: "a1", theme: "時計を撮ろう", dataUrl: "" }],
+    items: FRAME_TEMPLATES[0]!.polygons.map((p) => ({ polygonId: p.id, theme: buildThemeMapFromPreset(FRAME_TEMPLATES[0]!, CAPTURE_PRESETS[0]!)[p.id], dataUrl: "" })),
     ...overrides,
   };
 }
@@ -28,7 +29,7 @@ describe("parseSubmissionBody", () => {
   it("正しい投稿を受け付け、中身から画像形式を判定する", () => {
     const parsed = parseSubmissionBody(validBody());
     expect(parsed?.collage.contentType).toBe("image/webp");
-    expect(parsed?.items).toHaveLength(1);
+    expect(parsed?.items).toHaveLength(6);
   });
 
   it("webp と宣言された PNG は PNG として扱う（iPhone の Safari 対策）", () => {
@@ -42,6 +43,17 @@ describe("parseSubmissionBody", () => {
     expect(parseSubmissionBody(validBody({ collageDataUrl: dataUrl("text/html", WEBP_HEADER) }))).toBeNull();
     const huge = Buffer.concat([WEBP_HEADER, Buffer.alloc(MAX_COLLAGE_BYTES)]);
     expect(parseSubmissionBody(validBody({ collageDataUrl: dataUrl("image/webp", huge) }))).toBeNull();
+  });
+
+  it("未知のプリセット・テンプレート不一致・枠不足・重複・テーマ改ざんを拒否する", () => {
+    const items = validBody().items;
+    for (const overrides of [
+      { presetId: "unknown" }, { templateId: "unknown" }, { templateId: "shards-4" },
+      { items: items.slice(1) }, { items: items.map(() => items[0]) },
+      { items: items.map((item) => ({ ...item, theme: "改ざん" })) },
+    ]) {
+      expect(parseSubmissionBody(validBody(overrides))).toBeNull();
+    }
   });
 
   it("必須項目の欠落や型違いでは例外を投げずに null を返す", () => {

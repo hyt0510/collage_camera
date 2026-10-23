@@ -1,3 +1,4 @@
+import { fetchJson } from "@/services/api/request";
 import { FrameTemplate } from "@/lib/collage-config";
 
 export type SubmissionResult = {
@@ -7,11 +8,10 @@ export type SubmissionResult = {
 };
 
 export async function fetchAssignedPreset() {
-  const response = await fetch("/api/capture-preset", { cache: "no-store" });
+  const { response, payload } = await fetchJson<{ activePreset: { id: string; templateId: string; templateName: string; polygons: FrameTemplate["polygons"]; themeMap: Record<string, string> }; error?: string }>("/api/capture-preset", { cache: "no-store" });
   if (!response.ok) throw new Error("プリセットの取得に失敗しました。");
   
-  const payload = await response.json();
-  if ("error" in payload) throw new Error(payload.error);
+  if (!payload || payload.error) throw new Error(payload?.error || "プリセットの取得に失敗しました。");
   
   return payload.activePreset as {
     id: string;
@@ -28,23 +28,12 @@ export async function submitCollageData(data: {
   presetId: string;
   collageDataUrl?: string;
   items: Array<{ polygonId: string; theme: string; dataUrl: string }>;
-}, idToken: string) {
-  let response: Response;
-  try {
-    response = await fetch("/api/submissions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${idToken}`,
-      },
-      body: JSON.stringify(data),
-    });
-  } catch {
-    throw new Error("通信に失敗しました。電波の良い場所で、もう一度お試しください。");
-  }
-
-  // サーバーの上限超過などで JSON 以外が返ってきても、分かる言葉で伝える
-  const payload = await response.json().catch(() => null);
+}, idToken: string, requestId: string) {
+  const { response, payload } = await fetchJson<SubmissionResult & { error?: string }>("/api/submissions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}`, "Idempotency-Key": requestId },
+    body: JSON.stringify(data),
+  }, 65_000);
   if (!response.ok) {
     if (response.status === 413) throw new Error("画像が大きすぎて送れませんでした。撮り直してお試しください。");
     throw new Error(payload?.error || "投稿に失敗しました。もう一度お試しください。");

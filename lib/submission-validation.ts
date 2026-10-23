@@ -1,4 +1,5 @@
 import "server-only";
+import { buildThemeMapFromPreset, findTemplateById, getPresetById } from "@/lib/collage-config";
 
 /**
  * 投稿APIに送られてくるデータの検証
@@ -69,6 +70,9 @@ export function parseSubmissionBody(raw: unknown): ValidSubmissionBody | null {
   const body = raw as Record<string, unknown>;
 
   if (!isValidId(body.templateId) || !isValidId(body.presetId)) return null;
+  const preset = getPresetById(body.presetId);
+  const template = findTemplateById(body.templateId);
+  if (!preset || !template || preset.templateId !== template.id) return null;
 
   const collage = decodeImageDataUrl(body.collageDataUrl);
   if (!collage) return null;
@@ -76,6 +80,9 @@ export function parseSubmissionBody(raw: unknown): ValidSubmissionBody | null {
   if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > MAX_ITEMS) {
     return null;
   }
+  if (body.items.length !== template.polygons.length) return null;
+  const themes = buildThemeMapFromPreset(template, preset);
+  const slotIds = new Set(template.polygons.map((polygon) => polygon.id));
 
   const items: ValidSubmissionBody["items"] = [];
   for (const rawItem of body.items) {
@@ -83,6 +90,7 @@ export function parseSubmissionBody(raw: unknown): ValidSubmissionBody | null {
     const item = rawItem as Record<string, unknown>;
     if (!isValidId(item.polygonId)) return null;
     if (typeof item.theme !== "string" || item.theme.length > MAX_THEME_LENGTH) return null;
+    if (!slotIds.delete(item.polygonId) || item.theme !== themes[item.polygonId]) return null;
     const dataUrl = item.dataUrl ?? "";
     if (typeof dataUrl !== "string" || dataUrl.length > MAX_ITEM_DATA_URL_LENGTH) return null;
     items.push({ polygonId: item.polygonId, theme: item.theme, dataUrl });
