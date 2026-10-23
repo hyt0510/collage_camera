@@ -1,7 +1,9 @@
+import { OperationBusyError, withOperationLock } from "@/lib/operation-lock";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/admin-auth";
 import { updateSubmissionStatus } from "@/lib/submission-store";
+import { invalidateApprovedSubmissions } from "@/lib/submission-cache";
 import { isValidId } from "@/lib/submission-validation";
 
 type Action = "approve" | "hide";
@@ -43,7 +45,15 @@ export async function PATCH(
     );
   }
 
-  const updated = await updateSubmissionStatus(id, action);
+  let updated;
+  try {
+    updated = await withOperationLock("admin-submissions", () => updateSubmissionStatus(id, action));
+  } catch (error) {
+    if (error instanceof OperationBusyError) return NextResponse.json({ error: error.message }, { status: 409 });
+    return NextResponse.json({ error: "表示状態の変更を完了できませんでした。もう一度操作してください。" }, { status: 500 });
+  } finally {
+    invalidateApprovedSubmissions();
+  }
   if (!updated) {
     return NextResponse.json({ error: "対象投稿が見つかりません。" }, { status: 404 });
   }
@@ -64,10 +74,20 @@ export async function DELETE(
   }
   const { deleteSubmission } = await import("@/lib/submission-store");
   
-  const success = await deleteSubmission(id);
+  let success;
+  try {
+    success = await withOperationLock("admin-submissions", () => deleteSubmission(id));
+  } catch (error) {
+    if (error instanceof OperationBusyError) return NextResponse.json({ error: error.message }, { status: 409 });
+    return NextResponse.json({ error: "削除を完了できませんでした。もう一度操作してください。" }, { status: 500 });
+  } finally {
+    invalidateApprovedSubmissions();
+  }
   if (!success) {
     return NextResponse.json({ error: "対象投稿が見つかりません。" }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });
 }
+
+export const maxDuration = 60;

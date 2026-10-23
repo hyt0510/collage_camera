@@ -24,7 +24,11 @@ function submissionsOf(userId: string) {
 }
 
 function hasEligibleSubmission(submissions: { docs: { get(field: string): unknown }[] }): boolean {
-  return submissions.docs.some((doc) => isPrizeEligiblePreset(doc.get("presetId") as string | undefined));
+  return submissions.docs.some((doc) => {
+    const eligible = doc.get("prizeEligible");
+    // 新しい投稿はサーバーの確定値を使い、過去の投稿だけ従来の判定に戻す
+    return typeof eligible === "boolean" ? eligible : isPrizeEligiblePreset(doc.get("presetId") as string | undefined);
+  });
 }
 
 export async function getPrizeStatus(userId: string): Promise<PrizeStatus> {

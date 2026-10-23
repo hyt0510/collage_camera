@@ -1,15 +1,19 @@
+import { protectParticipantRequest } from "@/lib/api-protection";
+import { createHash } from "node:crypto";
+import { processSubmissionRequest, SubmissionRequestError } from "@/lib/submission-request-store";
+import { getSubmissionCapturePreset } from "@/lib/capture-preset-store";
+import { isPrizeEligiblePreset } from "@/lib/collage-config";
+import { OperationBusyError, withOperationLock, withSubmissionActivity } from "@/lib/operation-lock";
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { moderateImage } from "@/lib/moderation";
-import { parseSubmissionBody } from "@/lib/submission-validation";
+import { isValidId, parseSubmissionBody } from "@/lib/submission-validation";
+import { getApprovedSubmissions, invalidateApprovedSubmissions } from "@/lib/submission-cache";
 import { listPrizeRedemptions } from "@/lib/prize-store";
 import {
   createSubmission,
   listAllSubmissions,
-  listApprovedSubmissions,
-  releaseSubmissionQuota,
-  reserveSubmissionQuota,
   SubmissionLimitError,
   withAdminImageUrls,
   type ModerationResult,
@@ -34,27 +38,22 @@ async function verifyAuthToken(request: Request): Promise<{ uid: string } | null
   try {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     return { uid: decodedToken.uid };
-  } catch (e: any) {
-    console.error("Token verification failed:", e.message);
+  } catch (e) {
+    console.error("Token verification failed:", e instanceof Error ? e.message : "invalid token");
     return null;
   }
 }
 
-// 承認済み投稿のインメモリキャッシュと制御フラグ
-let cachedApprovedSubmissions: any = null;
-let lastFetchedApproved: number = 0;
-let hasNewSubmissions: boolean = false; // 新着投稿があったかどうかのフラグ
-const CACHE_MAX_TTL_MS = 30000; // 最長キャッシュ期間 (30秒)
-const CACHE_MIN_INTERVAL_MS = 5000; // 最短データ取得間隔 (5秒)
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   try {
     const scope = new URL(request.url).searchParams.get("scope");
     if (scope === "all") {
-      // 非表示の投稿も含むため管理者のみ
-      const denied = requireAdmin(request);
-      if (denied) return denied;
-
       // 管理用画面はリアルタイム性を優先するためキャッシュしない
       const [submissions, redemptions] = await Promise.all([
         listAllSubmissions().then(withAdminImageUrls),
@@ -77,35 +76,21 @@ export async function GET(request: Request) {
       });
     }
 
-    const now = Date.now();
-    
-    // データ再取得が必要かどうかの判定
-    const needsRefetch = 
-      !cachedApprovedSubmissions || 
-      (
-        (now - lastFetchedApproved > CACHE_MAX_TTL_MS) ||
-        (hasNewSubmissions && (now - lastFetchedApproved > CACHE_MIN_INTERVAL_MS))
-      );
-
-    if (needsRefetch) {
-      const submissions = await listApprovedSubmissions();
-      cachedApprovedSubmissions = submissions.map((submission) => ({
-        ...submission,
-        items: submission.items.map((item) => ({
-          ...item,
-          dataUrl: item.imageUrl,
-        })),
-        collageDataUrl: submission.collageImageUrl,
-      }));
-      lastFetchedApproved = now;
-      hasNewSubmissions = false; // フラグをリセット
-      console.log(`[API Cache] Fetched from Firestore (Reason: ${hasNewSubmissions ? 'New Submission' : 'TTL Expired'}). Next min refetch in ${CACHE_MIN_INTERVAL_MS / 1000}s`);
-    } else {
-      console.log(`[API Cache] Serving cached submissions. Cache age: ${(now - lastFetchedApproved) / 1000}s`);
+    const submissions = await getApprovedSubmissions();
+    // モニターに必要な項目だけ返し、前回と同じ内容なら本文の転送を省く
+    const payload = { submissions: submissions.map((submission) => ({
+      id: submission.id,
+      placement: submission.placement,
+      collageImageUrl: submission.collageImageUrl,
+      items: submission.items.map((item) => ({ imageUrl: item.imageUrl })),
+    })) };
+    const etag = `"${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}"`;
+    const headers = { "Cache-Control": "private, no-cache", "ETag": etag, "Vary": "Authorization" };
+    if (request.headers.get("If-None-Match") === etag) {
+      return new NextResponse(null, { status: 304, headers });
     }
-
-    return NextResponse.json({ submissions: cachedApprovedSubmissions });
-  } catch (e: any) {
+    return NextResponse.json(payload, { headers });
+  } catch (e) {
     console.error("GET /api/submissions error:", e);
     return NextResponse.json({ error: "Fetch failed" }, { status: 500 });
   }
@@ -123,6 +108,8 @@ export async function POST(request: Request) {
     );
   }
   const userId = authResult.uid;
+  const denied = await protectParticipantRequest(request, userId, "submissions");
+  if (denied) return denied;
 
   let raw: unknown;
   try {
@@ -139,41 +126,27 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2. 投稿回数の制限（検閲や画像保存より先に確認して、荒らしによる消費を防ぐ）
-  try {
-    await reserveSubmissionQuota(userId, body.presetId);
-  } catch (error) {
-    if (error instanceof SubmissionLimitError) {
-      const message = error.reason === "limit"
-        ? "投稿できる回数の上限に達しました。参加ありがとうございました！"
-        : "少し時間をあけてから、もう一度投稿してください。";
-      return NextResponse.json({ error: message }, { status: 429 });
-    }
-    console.error("Quota check error:", error);
-    return NextResponse.json(
-      { error: "投稿に失敗しました。時間をおいてもう一度お試しください。" },
-      { status: 500 },
-    );
-  }
+  const requestId = request.headers.get("Idempotency-Key");
+  if (!isValidId(requestId)) return NextResponse.json({ error: "ページを再読み込みして、もう一度投稿してください。" }, { status: 400 });
+  const fingerprint = createHash("sha256").update(JSON.stringify({ templateId: body.templateId, presetId: body.presetId, items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })) })).update(body.collage.buffer).digest("hex");
 
   try {
-    // 3. 検閲（モニターに実際に表示されるコラージュ画像が対象。APIが失敗しても止めない）
-    const moderation = await moderateImage(body.collage.buffer);
-    const status = decideStatus(moderation);
+    const submission = await withSubmissionActivity(() => processSubmissionRequest(userId, requestId, fingerprint, async (submissionId) => {
+      const activePreset = await getSubmissionCapturePreset();
+      if (!activePreset) throw new Error("プリセットの確認に失敗しました。");
+      const moderation = await moderateImage(body.collage.buffer);
+      const status = decideStatus(moderation);
+      return createSubmission({
+        submissionId, userId, templateId: body.templateId, presetId: body.presetId,
+        // 事前公開中に当日用IDを申告しても、景品の資格を付けない
+        prizeEligible: isPrizeEligiblePreset(body.presetId) && isPrizeEligiblePreset(activePreset.id),
+        status, moderation, collage: body.collage,
+        items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })),
+      });
+    }, body.presetId));
 
-    // 4. 保存
-    const submission = await createSubmission({
-      userId,
-      templateId: body.templateId,
-      presetId: body.presetId,
-      status,
-      moderation,
-      collage: body.collage,
-      items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })),
-    });
-
-    // 新着投稿があったフラグを立てる (次回GET時にスロットリング付きで反映)
-    if (status === "approved") hasNewSubmissions = true;
+    // このインスタンスは即座に破棄し、別インスタンスでも5秒以内に再取得する
+    if (submission.status === "approved") invalidateApprovedSubmissions();
 
     return NextResponse.json({
       id: submission.id,
@@ -182,7 +155,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Submission error:", error);
-    await releaseSubmissionQuota(userId);
+    if (error instanceof OperationBusyError) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof SubmissionRequestError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof SubmissionLimitError) return NextResponse.json({ error: error.reason === "limit" ? "投稿回数の上限に達しました。参加ありがとうございました！" : "少し時間をあけてから、もう一度投稿してください。" }, { status: 429 });
     return NextResponse.json(
       { error: "保存に失敗しました。時間をおいてもう一度お試しください。" },
       { status: 500 },
@@ -196,9 +171,11 @@ export async function DELETE(request: Request) {
 
   const { deleteAllSubmissions } = await import("@/lib/submission-store");
   try {
-    const count = await deleteAllSubmissions();
+    const count = await withOperationLock("admin-submissions", () => deleteAllSubmissions());
+    invalidateApprovedSubmissions();
     return NextResponse.json({ success: true, count });
-  } catch (e: any) {
+  } catch (e) {
+    if (e instanceof OperationBusyError) return NextResponse.json({ error: e.message }, { status: 409 });
     console.error("DELETE /api/submissions error:", e);
     return NextResponse.json({ error: "一括削除に失敗しました。" }, { status: 500 });
   }

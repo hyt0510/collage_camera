@@ -24,11 +24,27 @@ export default function MonitorPage() {
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
+    let cancelled = false;
+    let fetching = false;
+    let etag: string | null = null;
+    let popupTimer: ReturnType<typeof setTimeout>;
     const fetchSubmissions = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
-        const res = await fetch("/api/submissions");
+        const res = await fetch("/api/submissions", {
+          cache: "no-store",
+          headers: etag ? { "If-None-Match": etag } : {},
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (res.status === 304) {
+          if (!cancelled) setError(null);
+          return;
+        }
         if (!res.ok) throw new Error("Failed to fetch submissions");
         const data = await res.json();
+        if (cancelled) return;
+        etag = res.headers.get("ETag");
         const nextItems = (data.submissions || []) as MonitorSubmission[];
         
         setError(null);
@@ -38,24 +54,36 @@ export default function MonitorPage() {
         if (!isFirstLoad.current && newItems.length > 0) {
           const latest = newItems[0]!;
           setPopup(latest);
-          setTimeout(() => setPopup(null), 3000);
+          clearTimeout(popupTimer);
+          popupTimer = setTimeout(() => setPopup(null), 3000);
         }
 
         knownIds.current = new Set(nextItems.map((item) => item.id));
         setSubmissions(nextItems);
         isFirstLoad.current = false;
-      } catch (err: any) {
+      } catch (err) {
+        if (cancelled) return;
         console.error("Fetch error:", err);
-        setError(`Fetch Error: ${err.message}`);
+        setSubmissions([]);
+        // 画面を空にした後は、同じ一覧でも本文を取得して表示を戻す
+        etag = null;
+        setPopup(null);
+        setError("通信を確認しています。復旧すると自動で表示を再開します。");
+      } finally {
+        fetching = false;
       }
     };
 
     fetchSubmissions();
 
-    // 5分毎にポーリング (Firestoreの読み取りコストを抑えるため)
-    const interval = setInterval(fetchSubmissions, 300000);
+    // 非表示操作を早く反映する。API側は5秒間キャッシュして同時取得をまとめる
+    const interval = setInterval(fetchSubmissions, 5_000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearTimeout(popupTimer);
+    };
   }, []);
 
   // グリッドマップを作成

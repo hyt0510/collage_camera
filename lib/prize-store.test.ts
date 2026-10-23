@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 // Firestore の代わり。交換記録と、投稿ごとの presetId だけを持つ
-const state: { redeemedAt: string | null; presetIds: (string | undefined)[] } = { redeemedAt: null, presetIds: [] };
+const state: { redeemedAt: string | null; presetIds: (string | undefined)[]; prizeEligible?: boolean } = { redeemedAt: null, presetIds: [] };
 const created: unknown[] = [];
 const redemptionSnapshot = () => ({ exists: state.redeemedAt !== null, get: () => state.redeemedAt ?? undefined });
-const submissionsSnapshot = () => ({ docs: state.presetIds.map((presetId) => ({ get: () => presetId })) });
+const submissionsSnapshot = () => ({ docs: state.presetIds.map((presetId) => ({ get: (field: string) => field === "presetId" ? presetId : state.prizeEligible })) });
 const redemptionRef = { path: "prize_redemptions/user-1", get: async () => redemptionSnapshot() };
 const submissionsQuery = { path: "submissions?userId=user-1", get: async () => submissionsSnapshot() };
 // 交換記録の全件取得（管理画面用）
@@ -33,6 +33,7 @@ describe("redeemPrize", () => {
   beforeEach(() => {
     state.redeemedAt = null;
     state.presetIds = [];
+    state.prizeEligible = undefined;
     created.length = 0;
   });
 
@@ -65,6 +66,12 @@ describe("redeemPrize", () => {
     expect(await redeemPrize("user-1", NOW)).toEqual({ result: "redeemed", redeemedAt: NOW.toISOString() });
   });
 
+  it("サーバーが対象外と記録した投稿は、当日用IDでも交換しない", async () => {
+    state.presetIds = [FESTIVAL_PRESET];
+    state.prizeEligible = false;
+    expect(await redeemPrize("user-1", NOW)).toEqual({ result: "not_eligible" });
+  });
+
   it("presetId のない古い投稿でも交換する", async () => {
     state.presetIds = [undefined];
     expect(await redeemPrize("user-1", NOW)).toEqual({ result: "redeemed", redeemedAt: NOW.toISOString() });
@@ -75,6 +82,7 @@ describe("getPrizeStatus", () => {
   beforeEach(() => {
     state.redeemedAt = null;
     state.presetIds = [];
+    state.prizeEligible = undefined;
   });
 
   it("事前公開用プリセットの投稿だけなら対象外を返す", async () => {

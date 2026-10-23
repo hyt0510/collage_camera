@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { User } from "firebase/auth";
 import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
-import { fetchAssignedPreset, submitCollageData } from "@/services/api/collage";
+import { fetchAssignedPreset, submitCollageData, type SubmissionResult } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
 
 export const IMAGES_KEY = "collage_v10_img";
 export const PRESET_KEY = "collage_v10_preset";
+const SUBMISSION_REQUEST_KEY = "collage_v10_request";
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
 const HISTORY_KEY = "collage_v10_history";
 const UNLOCKED_QRS_KEY = "collage_v10_unlocked_qrs";
@@ -75,7 +76,7 @@ export function useCollageCapture(user: User | null) {
   const [images, setImages] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<SubmissionResult | null>(null);
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [collageHistory, setCollageHistory] = useState<CollageHistoryItem[]>([]);
@@ -85,10 +86,17 @@ export function useCollageCapture(user: User | null) {
   const isUnlockedQRsInitialized = useRef(false);
   // 連打で二重投稿しないよう、state の反映を待たずに止める
   const submittingRef = useRef(false);
+  const requestIdRef = useRef<string | null>(null);
+  const clearRequest = useCallback(() => {
+    requestIdRef.current = null;
+    try { localStorage.removeItem(SUBMISSION_REQUEST_KEY); } catch { /* 保存できない端末でも操作を続ける */ }
+  }, []);
 
   const pushLog = useCallback((_msg: string) => {}, []);
 
   const reset = useCallback(() => {
+    if (submittingRef.current) return;
+    clearRequest();
     setResult(null);
     setCollageDataUrl(null);
     setImages({});
@@ -105,7 +113,7 @@ export function useCollageCapture(user: User | null) {
         pushLog(`Preset synced after reset: ${preset.id}`);
       }
     }).catch(e => pushLog(`Sync error after reset: ${String(e)}`));
-  }, [pushLog]);
+  }, [pushLog, clearRequest]);
 
   // localStorage同期
   useEffect(() => {
@@ -166,14 +174,10 @@ export function useCollageCapture(user: User | null) {
           pushLog(`Initial preset synced: ${preset.id}`);
         }
       }
-    } catch (e) { pushLog(`Sync error in poll: ${String(e)}`); }
+    } catch (e) { pushLog(`Preset sync error: ${String(e)}`); }
   }, [presetId, themeMap, images, pushLog]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      void syncPreset();
-    }, 10000);
-
     const handleFocus = () => {
       void syncPreset();
     };
@@ -187,13 +191,15 @@ export function useCollageCapture(user: User | null) {
     window.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      clearInterval(timer);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [syncPreset]);
 
   useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+    if (cancelled) return;
     try {
       pushLog("--- Collage App Mounted ---");
 
@@ -238,6 +244,8 @@ export function useCollageCapture(user: User | null) {
         setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
         setThemeMap(preset.themeMap);
         pushLog(`Resuming: ${Object.keys(restoredImages).length} photos`);
+        // 写真がない保存状態で起動した場合も、最新のお題を確認する
+        if (Object.keys(restoredImages).length === 0) void syncPreset();
       } else {
         if (parsedImages !== null || preset !== null) {
           // 壊れた保存データは捨てて、最新のプリセットから始め直す
@@ -260,14 +268,18 @@ export function useCollageCapture(user: User | null) {
     } catch (globalError) {
       pushLog(`CRITICAL MOUNT ERROR: ${String(globalError)}`);
     }
+    });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // データURLを直接セットする（アプリ内カメラ用）
   const setImageDataUrl = useCallback((polygonId: string, dataUrl: string) => {
+    if (submittingRef.current) return;
+    clearRequest();
     setImages(prev => ({ ...prev, [polygonId]: dataUrl }));
     pushLog(`Direct image set: ${polygonId}`);
-  }, [pushLog]);
+  }, [pushLog, clearRequest]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>, polygonId: string) => {
     const file = event.target.files?.[0];
@@ -275,6 +287,8 @@ export function useCollageCapture(user: User | null) {
 
     try {
       const optimized = await compressImage(file, pushLog);
+      if (submittingRef.current) return;
+      clearRequest();
       setImages(prev => ({ ...prev, [polygonId]: optimized }));
       pushLog(`Success: ${polygonId} set`);
     } catch (e) {
@@ -298,6 +312,11 @@ export function useCollageCapture(user: User | null) {
       // Firebase IDトークンを取得
       const idToken = await user.getIdToken();
 
+      if (!requestIdRef.current) {
+        try { requestIdRef.current = localStorage.getItem(SUBMISSION_REQUEST_KEY); } catch { /* メモリのIDを使う */ }
+        requestIdRef.current ||= crypto.randomUUID();
+        try { localStorage.setItem(SUBMISSION_REQUEST_KEY, requestIdRef.current); } catch { /* 再読込までメモリで保持する */ }
+      }
       const res = await submitCollageData({
         userId,
         templateId: template.id,
@@ -307,12 +326,12 @@ export function useCollageCapture(user: User | null) {
         items: template.polygons.map(p => ({
           polygonId: p.id, theme: themeMap[p.id] || "", dataUrl: "" // ここを空にする
         })),
-      }, idToken);
+      }, idToken, requestIdRef.current);
       setResult(res);
       
       const newCount = submissionCount + 1;
       setSubmissionCount(newCount);
-      localStorage.setItem(SUBMISSION_COUNT_KEY, newCount.toString());
+      try { localStorage.setItem(SUBMISSION_COUNT_KEY, newCount.toString()); } catch { /* 投稿成功後の端末保存エラーは投稿失敗と扱わない */ }
       
       // 履歴に追加 (最大5件)
       const historyItem: CollageHistoryItem = {
@@ -329,12 +348,12 @@ export function useCollageCapture(user: User | null) {
       void saveHistoryToDB(newHistory).then(() => {
         // 保存できたら古いlocalStorageからは削除して容量を空ける
         localStorage.removeItem(HISTORY_KEY);
-      });
+      }).catch(() => pushLog("History save failed"));
 
-      localStorage.removeItem(IMAGES_KEY);
+      try { localStorage.removeItem(IMAGES_KEY); } catch { /* 次の作成で上書きする */ }
       pushLog("Submission complete.");
 
-    } catch (e: any) { 
+    } catch (e) {
       pushLog(`Submit failed: ${String(e)}`);
       setErrorMessage(e instanceof Error ? e.message : "投稿に失敗しました。もう一度お試しください。");
     } finally { 

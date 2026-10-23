@@ -1,3 +1,4 @@
+import { initializeAppCheck, ReCaptchaV3Provider, getToken } from "firebase/app-check";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
@@ -25,3 +26,12 @@ export const db = getFirestore(app);
 export const auth = typeof window !== "undefined"
   ? getAuth(app)
   : (null as unknown as ReturnType<typeof getAuth>);
+
+// App CheckはFirebase側の登録と公開サイトキーの設定後に有効化する
+const appCheck = typeof window !== "undefined" && process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+  ? initializeAppCheck(app, { provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true })
+  : null;
+
+export async function getAppCheckToken(): Promise<string | null> {
+  return appCheck ? (await getToken(appCheck)).token : null;
+}
