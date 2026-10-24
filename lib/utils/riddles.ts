@@ -11,21 +11,21 @@ export type Riddle = {
   reading: string;
 };
 
-const answers: Record<RiddleGroup, readonly (readonly [string, string])[]> = {
+const answers: Record<RiddleGroup, readonly (readonly [number, string, string])[]> = {
   gojuon: [
-    ["学科展示", "がっかてんじ"], ["野球場", "やきゅうじょう"], ["弓道場", "きゅうどうじょう"],
-    ["テニスコート", "てにすこーと"], ["駐輪場", "ちゅうりんじょう"], ["渡り廊下", "わたりろうか"],
-    ["白いベンチ", "しろいべんち"], ["消火器", "しょうかき"], ["屋外プール", "おくがいぷーる"],
+    [1, "学科展示", "がっかてんじ"], [2, "野球場", "やきゅうじょう"],
+    [4, "テニスコート", "てにすこーと"], [5, "駐輪場", "ちゅうりんじょう"], [6, "渡り廊下", "わたりろうか"],
+    [7, "白いベンチ", "しろいべんち"], [8, "消火器", "しょうかき"],
   ],
-  arrows: [["時計", "とけい"], ["傘立て", "かさたて"], ["倉庫", "そうこ"], ["校舎", "こうしゃ"]],
+  arrows: [[1, "時計", "とけい"], [2, "傘立て", "かさたて"], [3, "倉庫", "そうこ"], [4, "校舎", "こうしゃ"]],
 };
 
 export const RIDDLES: Riddle[] = (Object.entries(answers) as [RiddleGroup, typeof answers[RiddleGroup]][])
-  .flatMap(([group, list]) => list.map(([answer, reading], index) => ({
-    id: `${group}-${index + 1}`,
+  .flatMap(([group, list]) => list.map(([number, answer, reading]) => ({
+    id: `${group}-${number}`,
     group,
-    theme: `謎解き：${group === "gojuon" ? "五十音表" : "五十音表矢印"}${index + 1}`,
-    image: `/riddles/${group}-${index + 1}.png`,
+    theme: `謎解き：${group === "gojuon" ? "五十音表" : "五十音表矢印"}${number}`,
+    image: `/riddles/${group}-${number}.png`,
     answer,
     reading,
   })));

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { CAPTURE_PRESETS, findTemplateById } from "@/lib/collage-config";
 import { RIDDLES, findRiddleByTheme, isCorrectRiddleAnswer, randomizeThemeMap, isValidRandomThemeMap } from "@/lib/utils/riddles";
 
@@ -24,8 +26,17 @@ describe("謎解きとお題の抽選", () => {
     expect(first[template.polygons[4]!.id]).not.toBe(last[template.polygons[4]!.id]);
     expect(first[template.polygons[5]!.id]).not.toBe(last[template.polygons[5]!.id]);
     expect(JSON.stringify(preset)).toBe(original);
-    expect(RIDDLES.filter(r => r.group === "gojuon")).toHaveLength(9);
+    expect(RIDDLES.filter(r => r.group === "gojuon")).toHaveLength(7);
     expect(RIDDLES.filter(r => r.group === "arrows")).toHaveLength(4);
+  });
+
+  it("弓道場・屋外プールを除外し、残る問題と画像の対応を維持する", () => {
+    expect(RIDDLES.some(riddle => ["弓道場", "屋外プール"].includes(riddle.answer))).toBe(false);
+    expect(RIDDLES.find(riddle => riddle.id === "gojuon-4")?.answer).toBe("テニスコート");
+    expect(RIDDLES.find(riddle => riddle.id === "gojuon-8")?.answer).toBe("消火器");
+    for (const riddle of RIDDLES) expect(existsSync(resolve("public", riddle.image.slice(1)))).toBe(true);
+    expect(existsSync(resolve("public/riddles/gojuon-3.png"))).toBe(false);
+    expect(existsSync(resolve("public/riddles/gojuon-9.png"))).toBe(false);
   });
 
   it("種類違い・通常問題の重複・未知のお題・枠不足を拒否する", () => {

@@ -107,7 +107,7 @@ export function CollageFrame({ frameRef, template, images, themeMap, selectedSlo
                       }}
                     >
                       {/* 2行を超える分は「…」で省略する */}
-                      <span className="line-clamp-2 text-center leading-snug">{riddle ? `${riddle.answer}を撮ろう` : theme}</span>
+                      <span className="line-clamp-2 text-center leading-snug">{riddle ? "謎解き" : theme}</span>
                     </span>
                   )}
                 </span>
