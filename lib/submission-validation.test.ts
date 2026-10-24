@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { FRAME_TEMPLATES, CAPTURE_PRESETS, buildThemeMapFromPreset } from "@/lib/collage-config";
+import { randomizeThemeMap } from "@/lib/utils/riddles";
 
 // server-only はサーバー外で import すると例外を投げるため、テストでは空にする
 vi.mock("server-only", () => ({}));
@@ -26,6 +27,23 @@ function validBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe("parseSubmissionBody", () => {
+  it("グループ内で抽選した6枠を受け付ける", () => {
+    const body = validBody();
+    const map = randomizeThemeMap(FRAME_TEMPLATES[0]!, CAPTURE_PRESETS[0]!, () => 0);
+    body.items = body.items.map(item => ({ ...item, theme: map[item.polygonId]! }));
+    expect(parseSubmissionBody(body)?.items).toEqual(body.items);
+  });
+
+  it("抽選した謎解きの種類の入れ替えと通常お題の重複を拒否する", () => {
+    const body = validBody();
+    const map = randomizeThemeMap(FRAME_TEMPLATES[0]!, CAPTURE_PRESETS[0]!, () => 0);
+    body.items = body.items.map(item => ({ ...item, theme: map[item.polygonId]! }));
+    const wrongGroup = body.items.map((item, index) => index === 4 ? { ...item, theme: body.items[5]!.theme } : item);
+    const duplicate = body.items.map((item, index) => index === 1 ? { ...item, theme: body.items[0]!.theme } : item);
+    expect(parseSubmissionBody({ ...body, items: wrongGroup })).toBeNull();
+    expect(parseSubmissionBody({ ...body, items: duplicate })).toBeNull();
+  });
+
   it("正しい投稿を受け付け、中身から画像形式を判定する", () => {
     const parsed = parseSubmissionBody(validBody());
     expect(parsed?.collage.contentType).toBe("image/webp");

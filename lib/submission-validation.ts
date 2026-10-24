@@ -1,5 +1,6 @@
 import "server-only";
 import { buildThemeMapFromPreset, findTemplateById, getPresetById } from "@/lib/collage-config";
+import { isValidRandomThemeMap } from "@/lib/utils/riddles";
 
 /**
  * 投稿APIに送られてくるデータの検証
@@ -90,11 +91,16 @@ export function parseSubmissionBody(raw: unknown): ValidSubmissionBody | null {
     const item = rawItem as Record<string, unknown>;
     if (!isValidId(item.polygonId)) return null;
     if (typeof item.theme !== "string" || item.theme.length > MAX_THEME_LENGTH) return null;
-    if (!slotIds.delete(item.polygonId) || item.theme !== themes[item.polygonId]) return null;
+    if (!slotIds.delete(item.polygonId)) return null;
     const dataUrl = item.dataUrl ?? "";
     if (typeof dataUrl !== "string" || dataUrl.length > MAX_ITEM_DATA_URL_LENGTH) return null;
     items.push({ polygonId: item.polygonId, theme: item.theme, dataUrl });
   }
+
+  // 作成途中の旧固定テーマも受け付け、新しい抽選は枠ごとの種類と重複を確認する。
+  const isFixed = items.every(item => item.theme === themes[item.polygonId]);
+  const themeMap = Object.fromEntries(items.map(item => [item.polygonId, item.theme]));
+  if (!isFixed && !(preset.randomThemes && isValidRandomThemeMap(template, preset, themeMap))) return null;
 
   return { templateId: body.templateId, presetId: body.presetId, collage, items };
 }
