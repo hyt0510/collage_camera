@@ -367,7 +367,7 @@ export default function Home() {
               {/* お題・撮影ボタン・投稿ボタンを下部の1か所にまとめる */}
               <CapturePanel
                 mode={panelMode}
-                theme={selectedRiddle && !isLocked ? `${selectedRiddle.answer}を撮ろう` : selectedTheme}
+                theme={selectedRiddle ? "謎解き" : selectedTheme}
                 slotColor={selectedSlotColor}
                 buttonTextColor={getContrastColor(selectedSlotColor)}
                 hasImage={hasImageInSelected}
@@ -476,7 +476,7 @@ export default function Home() {
             return { left: rect.left + frame.clientLeft, top: rect.top + frame.clientTop,
               width: frame.clientWidth, height: frame.clientHeight };
           }}
-          theme={selectedRiddle ? `${selectedRiddle.answer}を撮ろう` : selectedTheme}
+          theme={selectedRiddle ? "謎解き" : selectedTheme}
           capturedCount={template.polygons.filter(p => images[p.id]).length}
           totalCount={template.polygons.length}
           slotColor={selectedSlotColor}
