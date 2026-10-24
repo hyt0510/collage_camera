@@ -9,6 +9,8 @@ import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { QrScannerScreen } from "@/components/features/camera/QrScannerScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
 import { CapturePanel } from "@/components/features/collage/CapturePanel";
+import { RiddleDialog } from "@/components/features/collage/RiddleDialog";
+import { findRiddleByTheme, getRiddleUnlockId } from "@/lib/utils/riddles";
 import { getCapturePanelMode } from "@/lib/utils/capture-panel";
 import { getSlotLockId, getSlotLockMessage, getUnlockMessageByLockId, getPresetById } from "@/lib/collage-config";
 import { findNextSlotId } from "@/lib/utils/slots";
@@ -23,7 +25,7 @@ export default function Home() {
 
   const {
     template, themeMap, images, errorMessage,
-    submitting, result, collageDataUrl, collageHistory,
+    submitting, preparing, result, collageDataUrl, collageHistory,
     hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
@@ -38,9 +40,11 @@ export default function Home() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const collageFrameRef = useRef<HTMLDivElement>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isRiddleOpen, setIsRiddleOpen] = useState(false);
 
   // 選択中のテーマ情報
   const selectedTheme = selectedSlotId ? themeMap[selectedSlotId] ?? null : null;
+  const selectedRiddle = findRiddleByTheme(selectedTheme);
   const hasImageInSelected = selectedSlotId ? !!images[selectedSlotId] : false;
 
   // 選択中スロットの色（テープの色）
@@ -50,7 +54,8 @@ export default function Home() {
 
   // ロック判定
   const totalSlots = template?.polygons.length ?? 0;
-  const lockId = template && presetId && selectedSlotIndex >= 0 ? getSlotLockId(presetId, selectedSlotIndex) : null;
+  const lockId = template && presetId && selectedSlotIndex >= 0
+    ? (selectedRiddle ? getRiddleUnlockId(presetId, selectedSlotIndex, selectedRiddle) : getSlotLockId(presetId, selectedSlotIndex)) : null;
   const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
   const lockMessage = presetId && selectedSlotIndex >= 0 ? getSlotLockMessage(presetId, selectedSlotIndex) : null;
 
@@ -59,6 +64,7 @@ export default function Home() {
   // 解除コードを適用する（URL の ?unlock= と、アプリ内での QR 読み取りの両方から使う）
   const applyUnlockCode = useCallback((unlockVal: string): "unlocked" | "already" | "invalid" => {
     const preset = presetId ? getPresetById(presetId) : null;
+    if (preset?.randomThemes && Object.values(themeMap).some(theme => findRiddleByTheme(theme))) return "invalid";
     const isValid = preset?.slotLocks ? Object.values(preset.slotLocks).includes(unlockVal) : false;
     if (!isValid) return "invalid";
     if (unlockedQRs.includes(unlockVal)) return "already";
@@ -85,7 +91,7 @@ export default function Home() {
     }
     setTimeout(() => setToastMessage(null), 4000);
     return "unlocked";
-  }, [presetId, unlockedQRs, setUnlockedQRs]);
+  }, [presetId, themeMap, unlockedQRs, setUnlockedQRs, setToastMessage]);
 
   // アプリ内で読み取った QR を処理する。使えないときは読み取り画面に出すエラー文言を返す
   const handleQrDetected = (text: string): string | null => {
@@ -292,6 +298,7 @@ export default function Home() {
                 </div>
               )}
 
+              {errorMessage && <p role="alert" className="text-sm font-bold text-rose-700">{errorMessage}</p>}
               <div className="shrink-0 flex gap-2">
                 {collageDataUrl && (
                   <a
@@ -308,9 +315,10 @@ export default function Home() {
                 )}
                 <button
                   onClick={reset}
-                  className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold active:scale-95 transition-all shadow-sm"
+                  disabled={preparing}
+                  className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold active:scale-95 transition-all shadow-sm disabled:opacity-50"
                 >
-                  もう一度作成
+                  {preparing ? "お題を準備中..." : "もう一度作成"}
                 </button>
               </div>
             </section>
@@ -359,7 +367,7 @@ export default function Home() {
               {/* お題・撮影ボタン・投稿ボタンを下部の1か所にまとめる */}
               <CapturePanel
                 mode={panelMode}
-                theme={selectedTheme}
+                theme={selectedRiddle && !isLocked ? `${selectedRiddle.answer}を撮ろう` : selectedTheme}
                 slotColor={selectedSlotColor}
                 buttonTextColor={getContrastColor(selectedSlotColor)}
                 hasImage={hasImageInSelected}
@@ -368,7 +376,8 @@ export default function Home() {
                 errorMessage={errorMessage}
                 onOpenCamera={() => setIsCameraOpen(true)}
                 onSubmit={submit}
-                onScanQr={() => setIsScannerOpen(true)}
+                onScanQr={() => selectedRiddle ? setIsRiddleOpen(true) : setIsScannerOpen(true)}
+                isRiddle={!!selectedRiddle}
               />
             </>
           )}
@@ -427,6 +436,21 @@ export default function Home() {
         <QrScannerScreen onDetect={handleQrDetected} onClose={() => setIsScannerOpen(false)} />
       )}
 
+      {isRiddleOpen && selectedRiddle && lockId && createPortal(
+        <RiddleDialog
+          key={lockId}
+          riddle={selectedRiddle}
+          onClose={() => setIsRiddleOpen(false)}
+          onSolved={() => {
+            setUnlockedQRs(previous => previous.includes(lockId) ? previous : [...previous, lockId]);
+            setIsRiddleOpen(false);
+            setToastMessage(`正解！${selectedRiddle.answer}の写真を撮ろう！`);
+            setTimeout(() => setToastMessage(null), 4000);
+          }}
+        />,
+        document.body,
+      )}
+
       {/* 本部テントの景品交換 QR の読み取り */}
       {isPrizeScannerOpen && (
         <QrScannerScreen onDetect={handlePrizeQrDetected} onClose={() => setIsPrizeScannerOpen(false)} />
@@ -452,7 +476,7 @@ export default function Home() {
             return { left: rect.left + frame.clientLeft, top: rect.top + frame.clientTop,
               width: frame.clientWidth, height: frame.clientHeight };
           }}
-          theme={selectedTheme}
+          theme={selectedRiddle ? `${selectedRiddle.answer}を撮ろう` : selectedTheme}
           capturedCount={template.polygons.filter(p => images[p.id]).length}
           totalCount={template.polygons.length}
           slotColor={selectedSlotColor}
@@ -466,7 +490,8 @@ export default function Home() {
               selectedSlotId,
               (id) => {
                 const index = template.polygons.findIndex(p => p.id === id);
-                const slotLockId = presetId ? getSlotLockId(presetId, index) : null;
+                const riddle = findRiddleByTheme(themeMap[id]);
+                const slotLockId = presetId ? (riddle ? getRiddleUnlockId(presetId, index, riddle) : getSlotLockId(presetId, index)) : null;
                 return !images[id] && !(slotLockId && !unlockedQRs.includes(slotLockId));
               },
             );

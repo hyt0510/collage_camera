@@ -14,6 +14,7 @@ interface Props {
   onOpenCamera: () => void;
   onSubmit: () => void;
   onScanQr: () => void;
+  isRiddle?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function CapturePanel({
   onOpenCamera,
   onSubmit,
   onScanQr,
+  isRiddle = false,
 }: Props) {
   const showTheme = mode === "capture" || mode === "locked" || mode === "retakeOrSubmit";
 
@@ -89,7 +91,7 @@ export function CapturePanel({
         // パネルの高さを他の状態とそろえるため、案内は枠なしの2行までにしてボタンと並べる
         <>
           <p className="text-[11px] font-bold text-zinc-600 leading-snug line-clamp-2">
-            🔒 {lockMessage ?? "この枠を撮影するには、QRコードをスキャンしてください！"}
+            🔒 {isRiddle ? "謎を解いて答えを入力すると撮影できます！" : (lockMessage ?? "この枠を撮影するには、QRコードをスキャンしてください！")}
           </p>
           <div className="flex">
             <button
@@ -97,7 +99,7 @@ export function CapturePanel({
               onClick={onScanQr}
               className="flex-1 h-9 bg-white text-zinc-800 text-sm font-bold border-2 border-zinc-800 shadow-[2px_3px_0_0_rgba(0,0,0,0.2)] active:translate-y-0.5 active:shadow-none transition-all"
             >
-              📷 QRコードを読み取る
+              {isRiddle ? "🧩 お題を表示" : "📷 QRコードを読み取る"}
             </button>
           </div>
         </>

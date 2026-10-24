@@ -16,6 +16,8 @@ export type CapturePreset = {
   name: string;
   templateId: string;
   themes: string[];
+  randomThemes?: boolean;
+  riddleSlots?: Record<string, "gojuon" | "arrows">;
   slotLocks?: Record<string, string>;
   lockMessages?: Record<string, string>;
   unlockMessages?: Record<string, string>;

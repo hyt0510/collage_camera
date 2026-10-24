@@ -26,6 +26,8 @@
         "「3」が入っているもの",
         "丸いものをとろう"
       ],
+      "randomThemes": true,
+      "riddleSlots": { "4": "gojuon", "5": "arrows" },
       "slotLocks": {
         "4": "a_1",
         "5": "a_2"
@@ -92,6 +94,8 @@
         "同じ色が三つある写真を撮ろう", 
         "飲み物を撮ろう"
       ],
+      "randomThemes": true,
+      "riddleSlots": { "4": "gojuon", "5": "arrows" },
       "slotLocks": {
         "4": "6_1",
         "5": "6_2"

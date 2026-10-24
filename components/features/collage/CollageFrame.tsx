@@ -1,6 +1,7 @@
 
 import { FrameTemplate, getSlotLockId } from "@/lib/collage-config";
 import type { Ref } from "react";
+import { findRiddleByTheme, getRiddleUnlockId } from "@/lib/utils/riddles";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
@@ -39,7 +40,8 @@ export function CollageFrame({ frameRef, template, images, themeMap, selectedSlo
           const theme = themeMap[polygon.id] ?? "";
 
           // ロック状態の判定
-          const lockId = presetId ? getSlotLockId(presetId, index) : null;
+          const riddle = findRiddleByTheme(theme);
+          const lockId = presetId ? (riddle ? getRiddleUnlockId(presetId, index, riddle) : getSlotLockId(presetId, index)) : null;
           const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
 
           return (
@@ -105,7 +107,7 @@ export function CollageFrame({ frameRef, template, images, themeMap, selectedSlo
                       }}
                     >
                       {/* 2行を超える分は「…」で省略する */}
-                      <span className="line-clamp-2 text-center leading-snug">{theme}</span>
+                      <span className="line-clamp-2 text-center leading-snug">{riddle ? `${riddle.answer}を撮ろう` : theme}</span>
                     </span>
                   )}
                 </span>

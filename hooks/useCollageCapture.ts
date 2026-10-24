@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { User } from "firebase/auth";
-import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES } from "@/lib/collage-config";
+import { FrameTemplate, FRAME_TEMPLATES, CAPTURE_THEMES, getPresetById } from "@/lib/collage-config";
 import { fetchAssignedPreset, submitCollageData, type SubmissionResult } from "@/services/api/collage";
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
+import { isValidRandomThemeMap } from "@/lib/utils/riddles";
 
 export const IMAGES_KEY = "collage_v10_img";
 export const PRESET_KEY = "collage_v10_preset";
@@ -76,6 +77,7 @@ export function useCollageCapture(user: User | null) {
   const [images, setImages] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [result, setResult] = useState<SubmissionResult | null>(null);
   const [collageDataUrl, setCollageDataUrl] = useState<string | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
@@ -86,6 +88,7 @@ export function useCollageCapture(user: User | null) {
   const isUnlockedQRsInitialized = useRef(false);
   // 連打で二重投稿しないよう、state の反映を待たずに止める
   const submittingRef = useRef(false);
+  const captureRevision = useRef(0);
   const requestIdRef = useRef<string | null>(null);
   const clearRequest = useCallback(() => {
     requestIdRef.current = null;
@@ -94,25 +97,35 @@ export function useCollageCapture(user: User | null) {
 
   const pushLog = useCallback((_msg: string) => {}, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback(async () => {
     if (submittingRef.current) return;
-    clearRequest();
-    setResult(null);
-    setCollageDataUrl(null);
-    setImages({});
-    localStorage.removeItem(IMAGES_KEY);
-    pushLog("UI Reset for new submission");
-
-    // リセット時に即座に最新プリセットと同期する
-    fetchAssignedPreset().then(preset => {
-      if (preset) {
-        setPresetId(preset.id);
-        setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
-        setThemeMap(preset.themeMap);
+    captureRevision.current += 1;
+    submittingRef.current = true;
+    setPreparing(true);
+    setErrorMessage("");
+    try {
+      // 次のお題を確定するまでは完了画面で待ち、旧お題で撮影を始めないようにする。
+      const preset = await fetchAssignedPreset();
+      clearRequest();
+      setResult(null);
+      setCollageDataUrl(null);
+      setImages({});
+      setUnlockedQRs(previous => previous.filter(id => !id.startsWith("riddle:")));
+      setPresetId(preset.id);
+      setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
+      setThemeMap(preset.themeMap);
+      try {
+        localStorage.removeItem(IMAGES_KEY);
         localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
-        pushLog(`Preset synced after reset: ${preset.id}`);
+      } catch {
+        pushLog("Preset save after reset failed");
       }
-    }).catch(e => pushLog(`Sync error after reset: ${String(e)}`));
+    } catch {
+      setErrorMessage("次のお題を取得できませんでした。もう一度作成を押してください。");
+    } finally {
+      submittingRef.current = false;
+      setPreparing(false);
+    }
   }, [pushLog, clearRequest]);
 
   // localStorage同期
@@ -136,7 +149,8 @@ export function useCollageCapture(user: User | null) {
     }
   }, [unlockedQRs, pushLog]);
 
-  const syncPreset = useCallback(async () => {
+  const syncPreset = useCallback(async (restoredPreset?: PresetSnapshot) => {
+    if (submittingRef.current) return;
     // 撮影進行中(すでに写真が1枚以上撮影されている場合)は、プリセットが切り替わらないように同期をスキップ
     let hasImages = Object.keys(images).length > 0;
     if (!hasImages && typeof window !== "undefined") {
@@ -157,16 +171,27 @@ export function useCollageCapture(user: User | null) {
       return;
     }
     try {
+      const revision = captureRevision.current;
       const preset = await fetchAssignedPreset();
+      // 通信待ちの間に撮影や次作品の準備が始まったら、遅れて届いたお題は適用しない。
+      if (revision !== captureRevision.current || submittingRef.current) return;
       if (preset) {
-        const themeMapChanged = JSON.stringify(preset.themeMap) !== JSON.stringify(themeMap);
-        if ((presetId && preset.id !== presetId) || (presetId && themeMapChanged)) {
+        const currentPresetId = restoredPreset?.id ?? presetId;
+        const currentThemeMap = restoredPreset?.themeMap ?? themeMap;
+        const settings = getPresetById(preset.id);
+        // 同じプリセットの抽選結果は、撮影前でもフォーカスや再読込で変更しない。
+        const themeMapChanged = settings?.randomThemes
+          ? !isValidRandomThemeMap({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons }, settings, currentThemeMap)
+          : JSON.stringify(preset.themeMap) !== JSON.stringify(currentThemeMap);
+        if ((currentPresetId && preset.id !== currentPresetId) || (currentPresetId && themeMapChanged)) {
+          captureRevision.current += 1;
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
           setThemeMap(preset.themeMap);
           localStorage.setItem(PRESET_KEY, JSON.stringify(preset));
           pushLog(`New preset or theme detected: ${preset.id}.`);
-        } else if (!presetId) {
+        } else if (!currentPresetId) {
+          captureRevision.current += 1;
           setPresetId(preset.id);
           setTemplate({ id: preset.templateId, name: preset.templateName, polygons: preset.polygons });
           setThemeMap(preset.themeMap);
@@ -233,11 +258,11 @@ export function useCollageCapture(user: User | null) {
       const parsedImages = parseJson(localStorage.getItem(IMAGES_KEY));
       const preset = parseJson(localStorage.getItem(PRESET_KEY));
 
-      if (isImageMap(parsedImages) && isPresetSnapshot(preset)) {
+      if ((parsedImages === null || isImageMap(parsedImages)) && isPresetSnapshot(preset)) {
         // 今の枠に存在しない枠の写真は捨てる
         const slotIds = new Set(preset.polygons.map((p) => p.id));
         const restoredImages = Object.fromEntries(
-          Object.entries(parsedImages).filter(([id]) => slotIds.has(id)),
+          Object.entries(parsedImages ?? {}).filter(([id]) => slotIds.has(id)),
         );
         setImages(restoredImages);
         setPresetId(preset.id);
@@ -245,7 +270,7 @@ export function useCollageCapture(user: User | null) {
         setThemeMap(preset.themeMap);
         pushLog(`Resuming: ${Object.keys(restoredImages).length} photos`);
         // 写真がない保存状態で起動した場合も、最新のお題を確認する
-        if (Object.keys(restoredImages).length === 0) void syncPreset();
+        if (Object.keys(restoredImages).length === 0) void syncPreset(preset);
       } else {
         if (parsedImages !== null || preset !== null) {
           // 壊れた保存データは捨てて、最新のプリセットから始め直す
@@ -276,6 +301,7 @@ export function useCollageCapture(user: User | null) {
   // データURLを直接セットする（アプリ内カメラ用）
   const setImageDataUrl = useCallback((polygonId: string, dataUrl: string) => {
     if (submittingRef.current) return;
+    captureRevision.current += 1;
     clearRequest();
     setImages(prev => ({ ...prev, [polygonId]: dataUrl }));
     pushLog(`Direct image set: ${polygonId}`);
@@ -288,6 +314,7 @@ export function useCollageCapture(user: User | null) {
     try {
       const optimized = await compressImage(file, pushLog);
       if (submittingRef.current) return;
+      captureRevision.current += 1;
       clearRequest();
       setImages(prev => ({ ...prev, [polygonId]: optimized }));
       pushLog(`Success: ${polygonId} set`);
@@ -366,7 +393,7 @@ export function useCollageCapture(user: User | null) {
 
   return { 
     template, themeMap, images, errorMessage, 
-    submitting, result, collageDataUrl, submissionCount, 
+    submitting, preparing, result, collageDataUrl, submissionCount,
     collageHistory, hasUnreadHistory, markHistoryRead, unlockedQRs, setUnlockedQRs, presetId,
     handleFileChange, setImageDataUrl, submit, reset, pushLog 
   };

@@ -1,5 +1,6 @@
 import { fetchJson } from "@/services/api/request";
-import { FrameTemplate } from "@/lib/collage-config";
+import { FrameTemplate, getPresetById } from "@/lib/collage-config";
+import { randomizeThemeMap } from "@/lib/utils/riddles";
 
 export type SubmissionResult = {
   id: string;
@@ -13,13 +14,18 @@ export async function fetchAssignedPreset() {
   
   if (!payload || payload.error) throw new Error(payload?.error || "プリセットの取得に失敗しました。");
   
-  return payload.activePreset as {
+  const assigned = payload.activePreset as {
     id: string;
     templateId: string;
     templateName: string;
     polygons: FrameTemplate["polygons"];
     themeMap: Record<string, string>;
   };
+  const preset = getPresetById(assigned.id);
+  return preset?.randomThemes ? {
+    ...assigned,
+    themeMap: randomizeThemeMap({ id: assigned.templateId, name: assigned.templateName, polygons: assigned.polygons }, preset),
+  } : assigned;
 }
 
 export async function submitCollageData(data: {
