@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { SubmissionConsentDialog } from "@/components/features/collage/SubmissionConsentDialog";
 import type { CapturePanelMode } from "@/lib/utils/capture-panel";
 
 interface Props {
@@ -34,6 +37,7 @@ export function CapturePanel({
   onScanQr,
   isRiddle = false,
 }: Props) {
+  const [isConsentOpen, setIsConsentOpen] = useState(false);
   const showTheme = mode === "capture" || mode === "locked" || mode === "retakeOrSubmit";
 
   const cameraButton = (
@@ -51,7 +55,7 @@ export function CapturePanel({
   const submitButton = (
     <button
       type="button"
-      onClick={onSubmit}
+      onClick={() => setIsConsentOpen(true)}
       disabled={submitting}
       className="flex-1 h-12 bg-zinc-800 text-white text-sm font-bold shadow-[3px_3px_0_0_rgba(0,0,0,0.2)] active:translate-y-0.5 active:shadow-none transition-all disabled:bg-zinc-400 disabled:shadow-none disabled:cursor-not-allowed border-2 border-zinc-900"
     >
@@ -117,6 +121,16 @@ export function CapturePanel({
           {cameraButton}
           {submitButton}
         </div>
+      )}
+      {isConsentOpen && createPortal(
+        <SubmissionConsentDialog
+          onClose={() => setIsConsentOpen(false)}
+          onConfirm={() => {
+            setIsConsentOpen(false);
+            onSubmit();
+          }}
+        />,
+        document.body,
       )}
     </section>
   );
