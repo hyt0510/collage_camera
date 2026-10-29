@@ -13,9 +13,27 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
   const [preview, setPreview] = useState<{ id: string; dataUrl: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [screenQr, setScreenQr] = useState<{ url: string; image: string | null } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const printImageRef = useRef<HTMLImageElement | null>(null);
   const sourceImageRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!canPrint) return;
+    let cancelled = false;
+    const url = window.location.href;
+    async function prepareQr() {
+      try {
+        const { toDataURL } = await import("qrcode");
+        const image = await toDataURL(url, { width: 192, margin: 4, errorCorrectionLevel: "M" });
+        if (!cancelled) setScreenQr({ url, image });
+      } catch {
+        if (!cancelled) setScreenQr({ url, image: null });
+      }
+    }
+    void prepareQr();
+    return () => { cancelled = true; };
+  }, [canPrint]);
 
   useEffect(() => () => {
     requestRef.current?.abort();
@@ -114,11 +132,11 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
     <section className="collage-print-panel mt-4 border-2 border-[#111111] bg-[#f8f8f8] p-4 shadow-[5px_5px_0_#111111]" aria-labelledby="print-heading">
       {canPrint && format === "L" && (
         <style>{`
-          @page { size: 89mm 127mm; margin: 0; }
+          @page { size: 89mm 119mm; margin: 0; }
           @media print {
             html, body { width: 89mm; height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: white !important; }
             .collage-print-panel, .collage-print-preview { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
-            .collage-print-image { display: block; width: 89mm !important; height: 127mm !important; max-width: none !important; border-radius: 0 !important; box-shadow: none !important; break-inside: avoid; }
+            .collage-print-image { display: block; width: 89mm !important; height: 119mm !important; max-width: none !important; border-radius: 0 !important; box-shadow: none !important; break-inside: avoid; }
           }
         `}</style>
       )}
@@ -128,9 +146,18 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
       </div>
       <p className="mt-2 text-sm text-zinc-600 print:hidden">{initialSubmissionId ? "URLの作品を自動で読み込みます。表示されない場合は「作品を開く」を押してください。" : "参加者に作品IDを見せてもらい、印刷するコラージュを開いてください。"}</p>
       <div className="mt-4 print:hidden">
+        {canPrint && <div className="mb-4 rounded-lg border border-zinc-300 bg-white p-3 text-center">
+          <p className="text-sm font-semibold text-zinc-900">この印刷画面を開くQRコード</p>
+          {screenQr ? <>
+            {screenQr.image
+              ? <img src={screenQr.image} width={192} height={192} alt="現在の印刷画面のQRコード" className="mx-auto h-48 w-48" />
+              : <p role="alert" className="my-2 text-sm text-rose-700">QRコードを表示できませんでした。下のリンクを使ってください。</p>}
+            <a href={screenQr.url} className="break-all text-xs text-blue-700 underline">{screenQr.url}</a>
+          </> : <p role="status" className="my-2 text-sm text-zinc-600">QRコードを準備中…</p>}
+        </div>}
         <label htmlFor="print-format" className="mb-1 block text-sm font-semibold text-zinc-800">印刷サイズ</label>
         <select id="print-format" value={format} disabled={loading} onChange={(event) => changePrintFormat(event.target.value === "mini" ? "mini" : "L")} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 disabled:opacity-60 sm:w-auto">
-          <option value="L">L判（89 × 127 mm）</option>
+          <option value="L">L判（89 × 119 mm）</option>
           <option value="mini">チェキmini（印画面 46 × 62 mm）</option>
         </select>
       </div>
