@@ -181,7 +181,7 @@ export function CameraScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    drawCameraFrame(ctx, video, rotation, zoom);
+    drawCameraFrame(ctx, video, rotation, zoom, facingMode === "user");
 
     // 圧縮
     const MAX = 800;
@@ -200,7 +200,7 @@ export function CameraScreen({
     setTimeout(() => setShowFlash(false), 250);
 
     setCapturedImage(dataUrl);
-  }, [zoom, rotation]);
+  }, [zoom, rotation, facingMode]);
 
   // カメラ切替
   const handleToggleCamera = useCallback(() => {
