@@ -1,15 +1,21 @@
+import { OperationBusyError, withOperationLock } from "@/lib/operation-lock";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import { requireAdmin } from "@/lib/admin-auth";
+import { protectParticipantRequest } from "@/lib/api-protection";
 import {
   getActiveCapturePreset,
   listCapturePresets,
   setActiveCapturePreset,
 } from "@/lib/capture-preset-store";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (new URL(request.url).search) return new Response(null, { status: 400 });
+  const denied = await protectParticipantRequest(request, "public-preset", "preset");
+  if (denied) return denied;
   const activePreset = await getActiveCapturePreset();
   if (!activePreset) {
     return NextResponse.json({ error: "プリセット設定が未初期化です。" }, { status: 500 });
@@ -18,7 +24,7 @@ export async function GET() {
   return NextResponse.json({
     presets: listCapturePresets(),
     activePreset,
-  });
+  }, { headers: { "Cache-Control": "public, max-age=0, s-maxage=10, must-revalidate" } });
 }
 
 export async function PUT(request: Request) {
@@ -45,8 +51,9 @@ export async function PUT(request: Request) {
 
   let activePreset: Awaited<ReturnType<typeof setActiveCapturePreset>>;
   try {
-    activePreset = await setActiveCapturePreset(presetId);
+    activePreset = await withOperationLock("admin-presets", () => setActiveCapturePreset(presetId));
   } catch (error) {
+    if (error instanceof OperationBusyError) return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Failed to save active preset:", error);
     return NextResponse.json({ error: "プリセットの保存に失敗しました。" }, { status: 500 });
   }

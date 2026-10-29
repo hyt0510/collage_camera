@@ -7,17 +7,5 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /submissions/{submissionId} {
-      // モニター用：承認済みのデータのみ誰でも読み取り可能
-      allow read: if resource.data.status == 'approved';
-      
-      // 投稿者本人用：Firebase匿名認証のUIDで自分の投稿のみ読み取り可能
-      allow read: if request.auth != null
-                    && request.auth.uid == resource.data.userId;
-      
-      // 書き込みはすべてNext.jsサーバー(Admin SDK)が行うため、
-      // クライアントからの直接のcreate/update/deleteは一切許可しない
-      allow write: if false;
-    }
   }
 }

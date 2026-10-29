@@ -14,7 +14,7 @@ describe("参加者の印刷受付番号", () => {
     const response = await call();
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ code: "K7M4PX" });
-    expect(getOrCreatePrintCode).toHaveBeenCalledWith("work-1", "owner");
+    expect(getOrCreatePrintCode).toHaveBeenCalledWith("work-1", "owner", expect.any(Function));
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
   it.each([null, "Basic abc"])("認証なし・Basic認証では番号を発行しない", async auth => {

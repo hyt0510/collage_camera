@@ -1,3 +1,5 @@
+import { protectParticipantRequest } from "@/lib/api-protection";
+import { settleParticipantRequest } from "@/lib/participant-admission";
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { getPrizeStatus, redeemPrize } from "@/lib/prize-store";
@@ -5,6 +7,7 @@ import { getTicketRemainingMs } from "@/lib/utils/prize";
 
 // 交換の状態を毎回最新で返す
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * AuthorizationヘッダーからFirebase IDトークンを検証し、UIDを返す
@@ -26,9 +29,13 @@ const UNAUTHORIZED = { error: "認証に失敗しました。ページを再読�
 export async function GET(request: Request) {
   const uid = await verifyUid(request);
   if (!uid) return NextResponse.json(UNAUTHORIZED, { status: 401 });
+  const denied = await protectParticipantRequest(request, uid, "prize");
+  if (denied) return denied;
 
   try {
-    const status = await getPrizeStatus(uid);
+    let reads = 12;
+    const status = await getPrizeStatus(uid, count => { reads = count; });
+    await settleParticipantRequest(request, { reads, writes: 0 });
     const ticketRemainingMs = status.redeemedAt ? getTicketRemainingMs(status.redeemedAt, Date.now()) : 0;
     return NextResponse.json({ ...status, ticketRemainingMs });
   } catch (e) {
@@ -49,13 +56,18 @@ export async function POST(request: Request) {
   if (!uid) return NextResponse.json(UNAUTHORIZED, { status: 401 });
 
   const body: unknown = await request.json().catch(() => null);
+  const denied = await protectParticipantRequest(request, uid, "prize");
+  if (denied) return denied;
   const code = (body as { code?: unknown } | null)?.code;
   if (typeof code !== "string" || code !== expectedCode) {
+    await settleParticipantRequest(request, { reads: 0, writes: 0 });
     return NextResponse.json({ error: "本部テントの景品交換QRコードを読み取ってください。" }, { status: 400 });
   }
 
   try {
-    const outcome = await redeemPrize(uid);
+    let reads = 12;
+    const outcome = await redeemPrize(uid, new Date(), count => { reads = count; });
+    await settleParticipantRequest(request, { reads, writes: outcome.result === "redeemed" ? 1 : 0 });
     if (outcome.result === "not_eligible") {
       return NextResponse.json(
         { error: "景品の対象になるコラージュが見つかりません。文化祭当日にコラージュを1枚投稿してから読み取ってください。" },

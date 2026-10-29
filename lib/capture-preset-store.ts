@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { db } from "@/lib/firebase-admin";
 import { FESTIVAL_LAUNCH_AT, getLaunchPresetId } from "@/lib/utils/festival-launch";
@@ -21,17 +21,23 @@ const SETTINGS_DOC_ID = "capturePreset";
 const CACHE_TTL_MS = 10_000;
 let cachedPresetId: string | null = null;
 let cachedAt = 0;
+let pendingPreset: Promise<string> | null = null;
+let pendingStartedAt = 0;
+let generation = 0;
 
 async function loadActivePresetId(): Promise<string> {
   const now = Date.now();
   const crossedLaunch = cachedAt < FESTIVAL_LAUNCH_AT && now >= FESTIVAL_LAUNCH_AT;
   if (cachedPresetId && now - cachedAt < CACHE_TTL_MS && !crossedLaunch) return cachedPresetId;
 
+  if (pendingPreset && !(pendingStartedAt < FESTIVAL_LAUNCH_AT && now >= FESTIVAL_LAUNCH_AT)) return pendingPreset;
+  const revision = generation;
+  const request = (async () => {
   try {
     const snapshot = await db.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
     const presetId = snapshot.get("presetId");
     const validId = typeof presetId === "string" && getPresetById(presetId) ? presetId : DEFAULT_PRESET_ID;
-    cachedPresetId = getLaunchPresetId(validId, snapshot.get("updatedAt"));
+    if (revision === generation) cachedPresetId = getLaunchPresetId(validId, snapshot.get("updatedAt"));
   } catch (e) {
     // Firestore に届かなくても参加者の画面は止めず、直前の値か既定のプリセットで続ける
     console.error("Failed to load active preset:", e);
@@ -39,8 +45,13 @@ async function loadActivePresetId(): Promise<string> {
       ? getLaunchPresetId(DEFAULT_PRESET_ID, undefined)
       : cachedPresetId;
   }
-  cachedAt = Date.now();
-  return cachedPresetId;
+  if (revision === generation) cachedAt = Date.now();
+  return cachedPresetId ?? DEFAULT_PRESET_ID;
+  })();
+  pendingStartedAt = now;
+  pendingPreset = request;
+  try { return await request; }
+  finally { if (pendingPreset === request) pendingPreset = null; }
 }
 
 export function listCapturePresets() {
@@ -104,6 +115,8 @@ export async function setActiveCapturePreset(presetId: string) {
     presetId: preset.id,
     updatedAt: new Date().toISOString(),
   });
+  generation++;
+  pendingPreset = null;
   cachedPresetId = preset.id;
   cachedAt = Date.now();
   return buildActivePreset(preset.id);

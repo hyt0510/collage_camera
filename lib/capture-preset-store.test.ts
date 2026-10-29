@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -27,6 +27,21 @@ describe("capture-preset-store", () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it("同時100取得でもFirestoreを1回だけ読む", async () => {
+    get.mockResolvedValue({ get: () => OTHER_ID });
+    const store = await loadStore();
+    await Promise.all(Array.from({ length: 100 }, () => store.getActiveCapturePreset()));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("当日切替後のコールドスタートも同時取得を1回にまとめる", async () => {
+    vi.setSystemTime(new Date("2026-10-30T01:00:00+09:00"));
+    get.mockResolvedValue({ get: () => OTHER_ID });
+    const store = await loadStore();
+    await Promise.all(Array.from({ length: 100 }, () => store.getActiveCapturePreset()));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
 
   it("Firestore に保存されたプリセットを返す", async () => {
     get.mockResolvedValue({ get: () => OTHER_ID });

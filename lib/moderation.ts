@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ModerationResult } from "@/lib/submission-store";    
+import { reserveVisionRequest } from "@/lib/vision-budget";
 
 type SafeSearchLikelihood =
   | "UNKNOWN"
@@ -40,6 +41,9 @@ export async function moderateImage(image: Buffer): Promise<ModerationResult> {
   }
 
   try {
+    if (!await reserveVisionRequest()) {
+      return { safe: null, source: "disabled", reason: "Automatic moderation budget is unavailable; manual review required." };
+    }
     const response = await fetch(
       "https://vision.googleapis.com/v1/images:annotate",
       {

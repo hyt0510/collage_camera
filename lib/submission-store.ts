@@ -1,10 +1,11 @@
 import { withOperationLock, withSubmissionReset } from "@/lib/operation-lock";
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
 import { db, bucket } from "./firebase-admin";
 import { generateCollageMosaicPlacements } from "./utils/mosaic";
 import type { DecodedImage } from "./submission-validation";
+import { withMonitorPreviewInvalidation } from "@/lib/monitor-preview-store";
+import { readMonitorManifest, writeMonitorManifest } from "@/lib/monitor-manifest";
 
 export type ModerationStatus =
   | "approved"
@@ -70,10 +71,12 @@ export async function getSubmissionVersion(): Promise<string> {
 
 // 表示状態だけ変わって更新番号が残ると、他のサーバーが古い一覧を返すため同時に保存する
 async function setSubmissionStatus(ref: DocumentReference, status: ModerationStatus): Promise<void> {
-  const batch = db.batch();
-  batch.update(ref, { status });
-  batch.set(submissionVersionRef(), { version: randomUUID() });
-  await batch.commit();
+  await db.runTransaction(async tx => {
+    const snapshot = await tx.get(ref);
+    if (!snapshot.exists) throw new Error("投稿が見つかりません。");
+    await writeMonitorManifest(tx, { ...snapshot.data(), id: ref.id } as Submission, status);
+    tx.update(ref, { status });
+  }, { maxAttempts: 1 });
 }
 
 export class SubmissionLimitError extends Error {
@@ -84,9 +87,6 @@ export class SubmissionLimitError extends Error {
 
 // モザイク用の座標プールを生成
 const MOSAIC_PLACEMENTS = generateCollageMosaicPlacements();
-
-// 管理画面で非公開画像を見せるための期限付きURLの有効期間
-const ADMIN_IMAGE_URL_TTL_MS = 15 * 60 * 1000;
 
 function storagePathFromUrl(url?: string): string | null {
   if (!url) return null;
@@ -99,15 +99,15 @@ function imageUrlsOf(submission: Submission): string[] {
     .filter((url): url is string => !!url);
 }
 
-// 承認済みの画像だけを公開し、それ以外はURLを知っていても見られないようにする
-async function setImagesPublic(submission: Submission, isPublic: boolean, ignoreMissing = false): Promise<void> {
+// 承認済みも含めて画像を非公開にし、表示は認証付きAPIだけから行う
+async function makeImagesPrivate(submission: Submission, ignoreMissing = false): Promise<void> {
   await Promise.all(imageUrlsOf(submission).map(async (url) => {
     const path = storagePathFromUrl(url);
     if (!path) return;
     const file = bucket.file(path);
     try {
       await file.setMetadata({ cacheControl: "no-store" });
-      await (isPublic ? file.makePublic() : file.makePrivate());
+      await file.makePrivate();
     } catch (error) {
       if (ignoreMissing && typeof error === "object" && error !== null && "code" in error && Number(error.code) === 404) return;
       throw error;
@@ -115,13 +115,13 @@ async function setImagesPublic(submission: Submission, isPublic: boolean, ignore
   }));
 }
 
-async function uploadImage(image: DecodedImage, path: string, isPublic: boolean): Promise<string> {
+async function uploadImage(image: DecodedImage, path: string): Promise<string> {
   const file = bucket.file(path);
 
   // 中身から判定した実際の形式で保存する
   await file.save(image.buffer, {
     metadata: { contentType: image.contentType, cacheControl: "no-store" },
-    public: isPublic,
+    public: false,
   });
 
   return `https://storage.googleapis.com/${bucket.name}/${path}`;
@@ -131,7 +131,7 @@ async function uploadImage(image: DecodedImage, path: string, isPublic: boolean)
  * 投稿枠を1つ確保する。上限超過や連続投稿なら SubmissionLimitError を投げる
  * 検閲や画像保存の前に呼び、荒らしによる課金APIやStorageの消費を防ぐ
  */
-export async function reserveSubmissionQuota(userId: string, presetId?: string): Promise<void> {
+export async function reserveSubmissionQuota(userId: string): Promise<void> {
   const ref = db.collection(QUOTA_COLLECTION).doc(userId);
   await db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref);
@@ -139,7 +139,7 @@ export async function reserveSubmissionQuota(userId: string, presetId?: string):
     const lastAt = (snapshot.get("lastAt") as number | undefined) ?? 0;
     const now = Date.now();
 
-    if (presetId !== "pre-festival-home" && count >= MAX_SUBMISSIONS_PER_USER) throw new SubmissionLimitError("limit");
+    if (count >= MAX_SUBMISSIONS_PER_USER) throw new SubmissionLimitError("limit");
     if (now - lastAt < MIN_SUBMISSION_INTERVAL_MS) throw new SubmissionLimitError("too_soon");
 
     tx.set(ref, { count: count + 1, lastAt: now }, { merge: true });
@@ -178,7 +178,7 @@ export async function createSubmission(input: {
   let collageImageUrl: string;
   try {
     const collagePath = `submissions/${submissionId}_collage.${input.collage.extension}`;
-    collageImageUrl = await uploadImage(input.collage, collagePath, false);
+    collageImageUrl = await uploadImage(input.collage, collagePath);
   } catch (e) {
     console.error("Step 1 FAILED (Storage):", e);
     throw new Error("画像の保存に失敗しました。");
@@ -219,15 +219,9 @@ export async function createSubmission(input: {
         submission.status = current.get("status") as ModerationStatus;
         return;
       }
-      // 公開前に管理画面で扱える記録を残す。途中失敗でも手動で再承認できる
-      try {
-        await setImagesPublic(submission, true);
-        await setSubmissionStatus(submissionRef, "approved");
-        submission.status = "approved";
-      } catch (error) {
-        await setImagesPublic(submission, false).catch((rollbackError: unknown) => console.error("公開状態の復元に失敗しました。管理画面で非表示を再実行してください。", rollbackError));
-        throw error;
-      }
+      await makeImagesPrivate(submission);
+      await setSubmissionStatus(submissionRef, "approved");
+      submission.status = "approved";
     });
   }
 
@@ -236,12 +230,7 @@ export async function createSubmission(input: {
 
 export async function listApprovedSubmissions(): Promise<Submission[]> {
   try {
-    const snapshot = await db.collection("submissions")
-      .where("status", "==", "approved")
-      .orderBy("createdAt", "desc")
-      .limit(500) // モザイク用に取得件数を増やす (278枠をすべて埋めるため500に拡張)
-      .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Submission));
+    return await readMonitorManifest();
   } catch (e) {
     console.error("Firestore list error:", e);
     throw e;
@@ -258,33 +247,24 @@ export async function listAllSubmissions(): Promise<Submission[]> {
 }
 
 /**
- * 管理画面用。非公開の画像は期限付きURLに差し替えて、運営だけが確認できるようにする
+ * 管理画面・モニター用。StorageのURLを返さず、毎回認証するAPIのURLに差し替える
  */
 export async function withAdminImageUrls(submissions: Submission[]): Promise<Submission[]> {
-  const expires = Date.now() + ADMIN_IMAGE_URL_TTL_MS;
-  const sign = async (url?: string) => {
-    const path = storagePathFromUrl(url);
-    if (!path) return url;
-    try {
-      const [signed] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires });
-      return signed as string;
-    } catch (e) {
-      console.warn(`Signed URL failed for ${path}:`, e);
-      return url;
-    }
-  };
-
-  return Promise.all(submissions.map(async (submission) => {
-    if (submission.status === "approved") return submission;
+  return submissions.map((submission) => {
+    const imageUrl = (url?: string, itemIndex?: number) => {
+      if (!storagePathFromUrl(url)?.startsWith("submissions/")) return undefined;
+      const base = `/api/submissions/${encodeURIComponent(submission.id)}/image`;
+      return itemIndex === undefined ? base : `${base}?item=${itemIndex}`;
+    };
     return {
       ...submission,
-      collageImageUrl: await sign(submission.collageImageUrl),
-      items: await Promise.all(submission.items.map(async (item) => ({
+      collageImageUrl: imageUrl(submission.collageImageUrl),
+      items: submission.items.map((item, index) => ({
         ...item,
-        imageUrl: await sign(item.imageUrl),
-      }))),
+        imageUrl: imageUrl(item.imageUrl, index),
+      })),
     };
-  }));
+  });
 }
 
 /** 認証済みの画像API用。投稿記録にある自分のバケットの画像だけを取得する。 */
@@ -320,20 +300,14 @@ export async function updateSubmissionStatus(
     const submission = { id: doc.id, ...doc.data() } as Submission;
 
     if (action === "approve") {
-      // 公開と記録のどちらかに失敗したら、元が非公開の画像を公開状態で残さない
-      try {
-        await setImagesPublic(submission, true);
-        await setSubmissionStatus(ref, "approved");
-      } catch (error) {
-        if (submission.status !== "approved") await setImagesPublic(submission, false).catch((rollbackError: unknown) => console.error("公開状態の復元に失敗しました。非表示を再実行してください。", rollbackError));
-        throw error;
-      }
+      await makeImagesPrivate(submission);
+      await setSubmissionStatus(ref, "approved");
     }
     if (action === "hide") {
       // モニターから外すのを優先し、画像の非公開化はその後に行う
-      await setSubmissionStatus(ref, "hidden_manual");
+      await withMonitorPreviewInvalidation(() => setSubmissionStatus(ref, "hidden_manual"));
       try {
-        await setImagesPublic(submission, false);
+        await makeImagesPrivate(submission);
       } catch (e) {
         console.error(`Failed to make images private for ${id}:`, e);
         throw new Error("表示は停止しましたが、画像の非公開化に失敗しました。もう一度非表示を実行してください。");
@@ -354,13 +328,13 @@ export async function deleteSubmission(id: string): Promise<boolean> {
     const submission = doc.data() as Submission;
 
     // 削除に失敗してもモニターへの表示は先に止め、再操作できる記録を残す
-    await db.runTransaction(async (tx) => {
+    await withMonitorPreviewInvalidation(() => db.runTransaction(async (tx) => {
+      await writeMonitorManifest(tx, { ...submission, id }, "hidden_manual");
       tx.update(ref, { status: "hidden_manual" });
-      tx.set(submissionVersionRef(), { version: randomUUID() });
       // 新しい形式の投稿は再送でも復活させない
       if (/^[a-f0-9]{64}$/.test(id)) tx.set(db.collection("submission_requests").doc(id), { deleted: true }, { merge: true });
-    });
-    await setImagesPublic(submission, false, true);
+    }));
+    await makeImagesPrivate(submission, true);
     await Promise.all(imageUrlsOf(submission).map(async (url) => {
       const path = storagePathFromUrl(url);
       if (!path) return;

@@ -22,23 +22,40 @@ const submission = (id: string) => ({ id, userId: "user", placement: { label: "A
 beforeEach(() => { state.docs.clear(); state.serial = Promise.resolve(); });
 
 describe("投稿再送の重複防止", () => {
-  it.each([10, 100])("デモ用プリセットは投稿済みが%d件でも受け付ける", async (count) => {
+  it.each([10, 100])("プリセットを問わず投稿済みが%d件なら拒否する", async (count) => {
     state.docs.set("submission_quotas/user", { count, lastAt: Date.now() - 30_000 });
-    const result = await processSubmissionRequest("user", "request", "hash", async (id) => submission(id), "pre-festival-home");
-    expect(result.userId).toBe("user");
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(count + 1);
+    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toThrow("limit");
+    expect(state.docs.get("submission_quotas/user")?.count).toBe(count);
   });
 
-  it.each(["festival-classic-a", undefined])("当日用またはプリセット未指定なら10回の上限を維持する（%s）", async (presetId) => {
+  it("10回の上限を維持し、上限超過時は保存処理を呼ばない", async () => {
     state.docs.set("submission_quotas/user", { count: 10, lastAt: Date.now() - 30_000 });
-    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id), presetId)).rejects.toThrow("limit");
+    const save = vi.fn(async (id: string) => submission(id));
+    await expect(processSubmissionRequest("user", "request", "hash", save)).rejects.toThrow("limit");
+    expect(save).not.toHaveBeenCalled();
     expect(state.docs.get("submission_quotas/user")?.count).toBe(10);
   });
 
   it("デモ用でも30秒以内の連続投稿は拒否する", async () => {
-    state.docs.set("submission_quotas/user", { count: 100, lastAt: Date.now() });
-    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id), "pre-festival-home")).rejects.toThrow("too_soon");
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(100);
+    state.docs.set("submission_quotas/user", { count: 1, lastAt: Date.now() });
+    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toThrow("too_soon");
+    expect(state.docs.get("submission_quotas/user")?.count).toBe(1);
+  });
+
+  it("別UIDでもイベント全体の1000回上限を超えて検閲・保存しない", async () => {
+    state.docs.set("settings/submissionBudget2026", { attempts: 1000 });
+    const save = vi.fn();
+    await expect(processSubmissionRequest("another", "new-request", "hash", save)).rejects.toThrow("受付上限");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("保存失敗でも全体の処理回数は返さず、再試行で無制限に検閲しない", async () => {
+    state.docs.set("settings/submissionBudget2026", { attempts: 999 });
+    const save = vi.fn(async () => { throw new Error("storage failed"); });
+    await expect(processSubmissionRequest("user", "request", "hash", save)).rejects.toThrow("storage failed");
+    await expect(processSubmissionRequest("user", "request", "hash", save)).rejects.toThrow("受付上限");
+    expect(save).toHaveBeenCalledOnce();
+    expect(state.docs.get("settings/submissionBudget2026")?.attempts).toBe(1000);
   });
 
   it("保存後の再送は検閲・保存を繰り返さず同じ結果を返す", async () => {
@@ -51,6 +68,22 @@ describe("投稿再送の重複防止", () => {
     expect(await processSubmissionRequest("user", "request", "hash", save)).toEqual(first);
     expect(save).toHaveBeenCalledOnce();
     expect(state.docs.get("submission_quotas/user")?.count).toBe(1);
+    expect(state.docs.get("settings/submissionBudget2026")?.attempts).toBe(1);
+  });
+
+  it("全体上限到達後も保存済み投稿の再送は新規枠を消費しない", async () => {
+    state.docs.set("settings/submissionBudget2026", { attempts: 999 });
+    const save = vi.fn(async (id: string) => {
+      const value = submission(id);
+      state.docs.set(`submissions/${id}`, value);
+      return value;
+    });
+    const first = await processSubmissionRequest("user", "request", "hash", save);
+    expect(state.docs.get("settings/submissionBudget2026")?.attempts).toBe(1000);
+    expect(await processSubmissionRequest("user", "request", "hash", save)).toEqual(first);
+    expect(state.docs.get("settings/submissionBudget2026")?.attempts).toBe(1000);
+    expect(save).toHaveBeenCalledOnce();
+    await expect(processSubmissionRequest("another-user", "request", "hash", save)).rejects.toThrow("受付上限");
   });
 
   it("同時再送は処理中を返し、投稿枠を2回確保しない", async () => {

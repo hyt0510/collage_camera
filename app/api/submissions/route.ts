@@ -1,4 +1,6 @@
 import { protectParticipantRequest } from "@/lib/api-protection";
+import { settleParticipantRequest } from "@/lib/participant-admission";
+import { isMonitorClosed } from "@/lib/monitor-schedule";
 import { createHash } from "node:crypto";
 import { processSubmissionRequest, SubmissionRequestError } from "@/lib/submission-request-store";
 import { getSubmissionCapturePreset } from "@/lib/capture-preset-store";
@@ -53,6 +55,9 @@ export async function GET(request: Request) {
 
   try {
     const scope = new URL(request.url).searchParams.get("scope");
+    if (scope !== "all" && isMonitorClosed()) {
+      return new Response(null, { status: 410, headers: { "Cache-Control": "no-store" } });
+    }
     if (scope === "all") {
       // 管理用画面はリアルタイム性を優先するためキャッシュしない
       const [submissions, redemptions] = await Promise.all([
@@ -76,7 +81,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const submissions = await getApprovedSubmissions();
+    const submissions = await withAdminImageUrls(await getApprovedSubmissions());
+    if (isMonitorClosed()) return new Response(null, { status: 410, headers: { "Cache-Control": "no-store" } });
     // モニターに必要な項目だけ返し、前回と同じ内容なら本文の転送を省く
     const payload = { submissions: submissions.map((submission) => ({
       id: submission.id,
@@ -108,8 +114,6 @@ export async function POST(request: Request) {
     );
   }
   const userId = authResult.uid;
-  const denied = await protectParticipantRequest(request, userId, "submissions");
-  if (denied) return denied;
 
   let raw: unknown;
   try {
@@ -127,11 +131,17 @@ export async function POST(request: Request) {
   }
 
   const requestId = request.headers.get("Idempotency-Key");
-  if (!isValidId(requestId)) return NextResponse.json({ error: "ページを再読み込みして、もう一度投稿してください。" }, { status: 400 });
+  if (!isValidId(requestId)) {
+    return NextResponse.json({ error: "ページを再読み込みして、もう一度投稿してください。" }, { status: 400 });
+  }
+  const denied = await protectParticipantRequest(request, userId, "submissions");
+  if (denied) return denied;
   const fingerprint = createHash("sha256").update(JSON.stringify({ templateId: body.templateId, presetId: body.presetId, items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })) })).update(body.collage.buffer).digest("hex");
 
   try {
+    let attemptedSave = false;
     const submission = await withSubmissionActivity(() => processSubmissionRequest(userId, requestId, fingerprint, async (submissionId) => {
+      attemptedSave = true;
       const activePreset = await getSubmissionCapturePreset();
       if (!activePreset) throw new Error("プリセットの確認に失敗しました。");
       const moderation = await moderateImage(body.collage.buffer);
@@ -143,11 +153,13 @@ export async function POST(request: Request) {
         status, moderation, collage: body.collage,
         items: body.items.map(({ polygonId, theme }) => ({ polygonId, theme })),
       });
-    }, body.presetId));
+    }));
 
     // このインスタンスは即座に破棄し、別インスタンスでも5秒以内に再取得する
     if (submission.status === "approved") invalidateApprovedSubmissions();
 
+    // 再送は投稿処理の開始・終了と既存記録の確認だけで、検閲・保存を行わない。
+    await settleParticipantRequest(request, attemptedSave ? { reads: 20, writes: 12 } : { reads: 6, writes: 2 });
     return NextResponse.json({
       id: submission.id,
       placementLabel: submission.placement.label,
@@ -170,9 +182,14 @@ export async function DELETE(request: Request) {
   if (denied) return denied;
 
   const { deleteAllSubmissions } = await import("@/lib/submission-store");
+  const { deleteMonitorPreview } = await import("@/lib/monitor-preview-store");
   try {
-    const count = await withOperationLock("admin-submissions", () => deleteAllSubmissions());
-    invalidateApprovedSubmissions();
+    const count = await withOperationLock("admin-submissions", async () => {
+      const deletedCount = await deleteAllSubmissions();
+      invalidateApprovedSubmissions();
+      await deleteMonitorPreview();
+      return deletedCount;
+    });
     return NextResponse.json({ success: true, count });
   } catch (e) {
     if (e instanceof OperationBusyError) return NextResponse.json({ error: e.message }, { status: 409 });
