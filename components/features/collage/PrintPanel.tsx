@@ -13,27 +13,30 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
   const [preview, setPreview] = useState<{ id: string; dataUrl: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [screenQr, setScreenQr] = useState<{ url: string; image: string | null } | null>(null);
+  const [screenQr, setScreenQr] = useState<{ id: string; format: PrintFormat; url: string; image: string | null } | null>(null);
+  const previewId = preview?.id;
+  const currentQr = screenQr?.id === previewId && screenQr?.format === format ? screenQr : null;
   const requestRef = useRef<AbortController | null>(null);
   const printImageRef = useRef<HTMLImageElement | null>(null);
   const sourceImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (!canPrint) return;
+    if (!canPrint || !previewId) return;
     let cancelled = false;
-    const url = window.location.href;
+    const id = previewId;
+    const url = `${window.location.origin}/print/${encodeURIComponent(id)}?format=${format}`;
     async function prepareQr() {
       try {
         const { toDataURL } = await import("qrcode");
         const image = await toDataURL(url, { width: 192, margin: 4, errorCorrectionLevel: "M" });
-        if (!cancelled) setScreenQr({ url, image });
+        if (!cancelled) setScreenQr({ id, format, url, image });
       } catch {
-        if (!cancelled) setScreenQr({ url, image: null });
+        if (!cancelled) setScreenQr({ id, format, url, image: null });
       }
     }
     void prepareQr();
     return () => { cancelled = true; };
-  }, [canPrint]);
+  }, [canPrint, previewId, format]);
 
   useEffect(() => () => {
     requestRef.current?.abort();
@@ -101,7 +104,12 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
   useEffect(() => {
     if (!initialSubmissionId) return;
     let cancelled = false;
-    queueMicrotask(() => { if (!cancelled) void preparePrint(initialSubmissionId); });
+    const requestedFormat = new URLSearchParams(window.location.search).get("format") === "mini" ? "mini" : "L";
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setFormat(requestedFormat);
+      void preparePrint(initialSubmissionId, requestedFormat);
+    });
     return () => { cancelled = true; };
   }, [initialSubmissionId, preparePrint]);
 
@@ -146,13 +154,14 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
       </div>
       <p className="mt-2 text-sm text-zinc-600 print:hidden">{initialSubmissionId ? "URLの作品を自動で読み込みます。表示されない場合は「作品を開く」を押してください。" : "参加者に作品IDを見せてもらい、印刷するコラージュを開いてください。"}</p>
       <div className="mt-4 print:hidden">
-        {canPrint && <div className="mb-4 rounded-lg border border-zinc-300 bg-white p-3 text-center">
-          <p className="text-sm font-semibold text-zinc-900">この印刷画面を開くQRコード</p>
-          {screenQr ? <>
-            {screenQr.image
-              ? <img src={screenQr.image} width={192} height={192} alt="現在の印刷画面のQRコード" className="mx-auto h-48 w-48" />
+        {canPrint && preview && <div className="mb-4 rounded-lg border border-zinc-300 bg-white p-3 text-center">
+          <p className="text-sm font-semibold text-zinc-900">この作品の{printFormat.label}用画像を別端末で保存</p>
+          <p className="mt-1 text-xs text-zinc-600">別端末でQRを読み取り、印刷用の認証後に「{printFormat.label}用JPEGを保存」を押してください。</p>
+          {currentQr ? <>
+            {currentQr.image
+              ? <img src={currentQr.image} width={192} height={192} alt="印刷用の作品画像を開くQRコード" className="mx-auto h-48 w-48" />
               : <p role="alert" className="my-2 text-sm text-rose-700">QRコードを表示できませんでした。下のリンクを使ってください。</p>}
-            <a href={screenQr.url} className="break-all text-xs text-blue-700 underline">{screenQr.url}</a>
+            <a href={currentQr.url} className="break-all text-xs text-blue-700 underline">{currentQr.url}</a>
           </> : <p role="status" className="my-2 text-sm text-zinc-600">QRコードを準備中…</p>}
         </div>}
         <label htmlFor="print-format" className="mb-1 block text-sm font-semibold text-zinc-800">印刷サイズ</label>
