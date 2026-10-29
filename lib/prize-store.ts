@@ -18,9 +18,9 @@ export type RedeemResult =
   | { result: "redeemed" | "already"; redeemedAt: string }
   | { result: "not_eligible" };
 
-// プリセットを見て判定するので全件取る（1人あたりの投稿は上限までしかない）
+// 投稿上限と同じ10件に絞り、過去の無制限デモ投稿でも読み取りを増やさない。
 function submissionsOf(userId: string) {
-  return db.collection("submissions").where("userId", "==", userId);
+  return db.collection("submissions").where("userId", "==", userId).limit(10);
 }
 
 function hasEligibleSubmission(submissions: { docs: { get(field: string): unknown }[] }): boolean {
@@ -31,11 +31,12 @@ function hasEligibleSubmission(submissions: { docs: { get(field: string): unknow
   });
 }
 
-export async function getPrizeStatus(userId: string): Promise<PrizeStatus> {
+export async function getPrizeStatus(userId: string, onReads?: (count: number) => void): Promise<PrizeStatus> {
   const [redemption, submissions] = await Promise.all([
     db.collection(REDEMPTION_COLLECTION).doc(userId).get(),
     submissionsOf(userId).get(),
   ]);
+  onReads?.(1 + Math.max(1, submissions.docs.length));
   return {
     eligible: hasEligibleSubmission(submissions),
     redeemedAt: (redemption.get("redeemedAt") as string | undefined) ?? null,
@@ -45,21 +46,23 @@ export async function getPrizeStatus(userId: string): Promise<PrizeStatus> {
 /**
  * 景品を1回だけ交換する。同時に2回届いても、トランザクションで記録は1件にする
  */
-export async function redeemPrize(userId: string, now: Date = new Date()): Promise<RedeemResult> {
+export async function redeemPrize(userId: string, now: Date = new Date(), onReads?: (count: number) => void): Promise<RedeemResult> {
   const ref = db.collection(REDEMPTION_COLLECTION).doc(userId);
   return db.runTransaction(async (tx): Promise<RedeemResult> => {
     const redemption = await tx.get(ref);
     if (redemption.exists) {
+      onReads?.(1);
       return { result: "already", redeemedAt: redemption.get("redeemedAt") as string };
     }
 
     const submissions = await tx.get(submissionsOf(userId));
+    onReads?.(1 + Math.max(1, submissions.docs.length));
     if (!hasEligibleSubmission(submissions)) return { result: "not_eligible" };
 
     const redeemedAt = now.toISOString();
     tx.create(ref, { redeemedAt });
     return { result: "redeemed", redeemedAt };
-  });
+  }, { maxAttempts: 1 });
 }
 
 /**

@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 // Firebase クライアントの読み込みを削除 (API経由でデータを取得するため)
-import { GRID_COLS, GRID_ROWS, generateCollageMosaicPlacements } from "@/lib/utils/mosaic";
+import { generateCollageMosaicPlacements } from "@/lib/utils/mosaic";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
+import { MonitorStage } from "@/components/features/collage/MonitorStage";
+import { useMonitorPreviewPublisher } from "@/hooks/useMonitorPreviewPublisher";
+import { useMonitorClosed } from "@/hooks/useMonitorClosed";
+import { isMonitorClosed } from "@/lib/monitor-schedule";
 
 type MonitorSubmission = {
   id: string;
@@ -22,14 +26,21 @@ export default function MonitorPage() {
   const [error, setError] = useState<string | null>(null);
   const knownIds = useRef<Set<string>>(new Set());
   const isFirstLoad = useRef(true);
+  const gridRef = useRef<HTMLElement>(null);
+  const deadlineReached = useMonitorClosed();
+  const [serverClosed, setServerClosed] = useState(false);
+  const closed = deadlineReached || serverClosed;
+  const [previewSource, setPreviewSource] = useState<string | null>(null);
+  const previewMessage = useMonitorPreviewPublisher(gridRef, closed ? null : previewSource);
 
   useEffect(() => {
+    if (closed || isMonitorClosed()) return;
     let cancelled = false;
     let fetching = false;
     let etag: string | null = null;
     let popupTimer: ReturnType<typeof setTimeout>;
     const fetchSubmissions = async () => {
-      if (fetching) return;
+      if (fetching || isMonitorClosed()) return;
       fetching = true;
       try {
         const res = await fetch("/api/submissions", {
@@ -37,6 +48,10 @@ export default function MonitorPage() {
           headers: etag ? { "If-None-Match": etag } : {},
           signal: AbortSignal.timeout(5_000),
         });
+        if (res.status === 410) {
+          if (!cancelled) setServerClosed(true);
+          return;
+        }
         if (res.status === 304) {
           if (!cancelled) setError(null);
           return;
@@ -45,6 +60,7 @@ export default function MonitorPage() {
         const data = await res.json();
         if (cancelled) return;
         etag = res.headers.get("ETag");
+        setPreviewSource(etag);
         const nextItems = (data.submissions || []) as MonitorSubmission[];
         
         setError(null);
@@ -65,6 +81,7 @@ export default function MonitorPage() {
         if (cancelled) return;
         console.error("Fetch error:", err);
         setSubmissions([]);
+        setPreviewSource(null);
         // 画面を空にした後は、同じ一覧でも本文を取得して表示を戻す
         etag = null;
         setPopup(null);
@@ -84,7 +101,7 @@ export default function MonitorPage() {
       clearInterval(interval);
       clearTimeout(popupTimer);
     };
-  }, []);
+  }, [closed]);
 
   // グリッドマップを作成
   const grid = useMemo(() => {
@@ -99,6 +116,16 @@ export default function MonitorPage() {
     return map;
   }, [submissions]);
 
+  const visibleItems = useMemo(() => placements.flatMap((placement) => {
+    const item = grid.get(`${placement.row}-${placement.col}`);
+    const imageUrl = item?.collageImageUrl || item?.collageDataUrl || item?.items?.[0]?.imageUrl || item?.items?.[0]?.dataUrl;
+    return imageUrl && item ? [{ row:placement.row,col:placement.col,imageUrl,submissionId:item.id }] : [];
+  }),[grid]);
+
+  if (closed) {
+    return <main className="flex min-h-screen items-center justify-center bg-[#F5F3EE] p-6 text-center text-zinc-800"><h1 className="text-xl font-bold">モニターの公開は終了しました。</h1></main>;
+  }
+
   return (
     <main className="relative min-h-screen bg-[#F5F3EE] text-zinc-900 p-2 overflow-hidden flex items-center justify-center">
       <CollageBackground isOverlay={false} />
@@ -109,56 +136,9 @@ export default function MonitorPage() {
         </div>
       )}
 
-      {/* 高密度グリッド表示 */}
-      <section 
-        className="mx-auto grid w-full max-w-[95vw] aspect-[16/9] relative z-10"
-        style={{
-          gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-          gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
-          gap: "3px" // コラージュらしく少し隙間をあける
-        }}
-      >
-        {placements.map((p) => {
-          const item = grid.get(`${p.row}-${p.col}`);
-          const displayUrl = item?.collageImageUrl || item?.collageDataUrl || (item?.items?.[0]?.imageUrl || item?.items?.[0]?.dataUrl);
-          
-          // 固定シードによるランダムな回転とスケールでコラージュ感を演出
-          const randomRot = ((p.row * 13 + p.col * 7) % 21) - 10; // -10 to +10 degrees
-          const randomScale = 1 + (((p.row * 7 + p.col * 11) % 10) / 40); // 1.0 to 1.25
-
-          return (
-            <div
-              key={`${p.row}-${p.col}`}
-              className="relative transition-all duration-1000 group hover:z-50 hover:scale-150"
-              style={{
-                gridColumn: p.col + 1,
-                gridRow: p.row + 1,
-                zIndex: item ? 10 : 1,
-              }}
-            >
-              <div 
-                className="w-full h-full transition-all duration-700 shadow-[2px_3px_5px_rgba(0,0,0,0.2)]"
-                style={{
-                  transform: `rotate(${randomRot}deg) scale(${randomScale})`,
-                  backgroundColor: item ? "#fff" : "#E5E5E5",
-                  padding: "2px", // 白枠(写真のフチ)
-                }}
-              >
-                {displayUrl ? (
-                  <img
-                    src={displayUrl}
-                    alt=""
-                    className="h-full w-full object-cover animate-in fade-in zoom-in duration-1000"
-                  />
-                ) : (
-                  <div className="w-full h-full border border-dashed border-zinc-300 opacity-50" />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </section>
-
+      <div className="relative z-10 mx-auto w-full max-w-[95vw]">
+        <MonitorStage items={visibleItems} stageRef={gridRef}/>
+      </div>
       {/* 新着ポップアップ */}
       {popup && (
         <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
@@ -166,31 +146,29 @@ export default function MonitorPage() {
             <div className="flex flex-col items-center">
               <div className="h-1 w-24 bg-indigo-500 rounded-full mb-4 animate-pulse" />
               <div className="text-xs font-black uppercase tracking-[0.4em] text-indigo-400">
-                Fragment Received
+                新しい作品が届きました
               </div>
             </div>
             <div className="overflow-hidden rounded-2xl border-4 border-white/5 bg-zinc-900 shadow-[0_0_100px_rgba(79,70,229,0.4)]">
               {(() => {
                 const pUrl = popup.collageImageUrl || popup.collageDataUrl || (popup.items?.[0]?.imageUrl || popup.items?.[0]?.dataUrl);
                 return pUrl ? (
-                  <img src={pUrl} alt="new" className="h-[50vh] aspect-[9/16] object-cover" />
+                  <img src={pUrl} alt="new" className="h-[50vh] w-auto object-contain" />
                 ) : (
                   <div className="h-80 w-80 flex items-center justify-center bg-zinc-800 text-xs">No Image</div>
                 );
               })()}
             </div>
             <div className="font-mono text-[10px] text-white/50 bg-white/5 px-4 py-2 rounded-full border border-white/10">
-              Allocating to Matrix: {popup.placement?.row},{popup.placement?.col}
+              あなたの作品も、みんなのコラージュへ。
             </div>
           </div>
         </div>
       )}
 
       {/* 装飾 */}
-      <div className="fixed bottom-4 right-4 flex flex-col items-end font-mono text-[8px] uppercase tracking-tighter text-zinc-700 pointer-events-none">
-        <span>Render.Engine: Mosaic-V1</span>
-        <span>Resolution: {GRID_COLS}x{GRID_ROWS}</span>
-        <span>Status: Syncing Realtime</span>
+      <div className="fixed bottom-4 right-4 max-w-sm text-right text-[10px] leading-relaxed text-zinc-600 pointer-events-none">
+        <span>{previewMessage}</span>
       </div>
     </main>
   );

@@ -14,14 +14,14 @@ export async function withOperationLock<T>(key: string, operation: () => Promise
     const snapshot = await tx.get(ref);
     if ((snapshot.get("expiresAt") ?? 0) > Date.now()) throw new OperationBusyError();
     tx.set(ref, { token, expiresAt: Date.now() + 5 * 60_000 });
-  });
+  }, { maxAttempts: 1 });
   try {
     return await operation();
   } finally {
     await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref);
       if (snapshot.get("token") === token) tx.set(ref, { token: "", expiresAt: 0 });
-    }).catch((error: unknown) => console.error("操作ロックの解放に失敗しました。期限後に再試行できます。", error));
+    }, { maxAttempts: 1 }).catch((error: unknown) => console.error("操作ロックの解放に失敗しました。期限後に再試行できます。", error));
   }
 }
 
@@ -40,7 +40,7 @@ export async function withSubmissionActivity<T>(operation: () => Promise<T>): Pr
     const active = activeSubmissions(snapshot.get("active"));
     active[token] = Date.now() + 5 * 60_000;
     tx.set(ref, { active, resetUntil: 0 });
-  });
+  }, { maxAttempts: 1 });
   try {
     return await operation();
   } finally {
@@ -49,7 +49,7 @@ export async function withSubmissionActivity<T>(operation: () => Promise<T>): Pr
       const active = activeSubmissions(snapshot.get("active"));
       delete active[token];
       tx.update(ref, { active, resetUntil: snapshot.get("resetUntil") ?? 0 });
-    }).catch((error: unknown) => console.error("投稿処理の解放に失敗しました。期限後に回収します。", error));
+    }, { maxAttempts: 1 }).catch((error: unknown) => console.error("投稿処理の解放に失敗しました。期限後に回収します。", error));
   }
 }
 

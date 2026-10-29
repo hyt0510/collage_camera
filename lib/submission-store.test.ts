@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const state = vi.hoisted(() => ({ docs: new Map<string, Record<string, unknown>>(), events: [] as string[], failSave: false, failPrivate: false, failDelete: false, failPublish: false, deleted: new Set<string>(), failDeletePath: "", imageContentType: "image/jpeg" }));
+const state = vi.hoisted(() => ({ docs: new Map<string, Record<string, unknown>>(), events: [] as string[], failSave: false, failPrivate: false, failDelete: false, failPublish: false, deleted: new Set<string>(), failDeletePath: "", invalidatePreview: vi.fn() }));
+vi.mock("@/lib/monitor-preview-store", () => ({ withMonitorPreviewInvalidation: state.invalidatePreview }));
 vi.mock("@/lib/operation-lock", () => ({ withOperationLock: async (_key: string, run: () => Promise<unknown>) => run() }));
 vi.mock("@/lib/firebase-admin", () => {
   const ref = (key: string, id: string) => ({
@@ -12,7 +13,9 @@ vi.mock("@/lib/firebase-admin", () => {
   });
   return {
     db: {
-      collection: (name: string) => ({ doc: (id = "new-id") => ref(`${name}/${id}`, id) }),
+      collection: (name: string) => ({ doc: (id = "new-id") => ref(`${name}/${id}`, id),
+        where: () => ({ orderBy: () => ({ limit: () => ({ query: name }) }) }),
+      }),
       batch: () => {
         const writes: Array<() => void> = [];
         return {
@@ -24,11 +27,16 @@ vi.mock("@/lib/firebase-admin", () => {
           },
         };
       },
-      runTransaction: async (run: (tx: unknown) => Promise<unknown>) => run({
-        get: async (target: { key: string }) => ({ get: (field: string) => state.docs.get(target.key)?.[field] }),
+      runTransaction: async (run: (tx: unknown) => Promise<unknown>) => {
+        if (state.failSave) throw new Error("DB failed");
+        return run({
+        get: async (target: { key?: string; query?: string }) => target.query
+          ? { docs: [...state.docs.entries()].filter(([key, value]) => key.startsWith(`${target.query}/`) && value.status === "approved").map(([, value]) => ({ data: () => value })) }
+          : { exists: state.docs.has(target.key!), get: (field: string) => state.docs.get(target.key!)?.[field], data: () => state.docs.get(target.key!) },
         update: (target: { key: string }, data: Record<string, unknown>) => state.docs.set(target.key, { ...state.docs.get(target.key), ...data }),
         set: (target: { key: string }, data: Record<string, unknown>) => state.docs.set(target.key, { ...state.docs.get(target.key), ...data }),
-      }),
+        });
+      },
     },
     bucket: { name: "test-bucket", file: (path: string) => ({
       save: async (_buffer: unknown, options: { public: boolean; metadata: { cacheControl: string } }) => {
@@ -38,24 +46,43 @@ vi.mock("@/lib/firebase-admin", () => {
       setMetadata: async () => { if (state.deleted.has(path)) throw Object.assign(new Error("missing"), { code: 404 }); },
       makePublic: async () => { if (state.failPublish) throw new Error("publish failed"); state.events.push("publish"); },
       makePrivate: async () => { if (state.failPrivate) throw new Error("private failed"); },
-      download: async () => { if (state.deleted.has(path)) throw Object.assign(new Error("missing"), { code: 404 }); return [Buffer.from(path)]; },
-      getMetadata: async () => [{ contentType: state.imageContentType }],
+      download: async () => [Buffer.from(path)],
+      getMetadata: async () => [{ contentType: "image/jpeg" }],
       delete: async () => { if (state.failDelete || path === state.failDeletePath) throw new Error("delete failed"); state.deleted.add(path); },
     }) },
   };
 });
-const { createSubmission, updateSubmissionStatus, deleteSubmission, reserveSubmissionQuota, getSubmissionImage } = await import("./submission-store");
+const { createSubmission, updateSubmissionStatus, deleteSubmission, withAdminImageUrls, getSubmissionImage } = await import("./submission-store");
 const input = { userId: "user", templateId: "shards-a", presetId: "festival-classic-a", prizeEligible: true,
   status: "approved" as const, moderation: { safe: true, source: "cloud-vision" as const, reason: "ok" },
   collage: { buffer: Buffer.from("test"), contentType: "image/jpeg" as const, extension: "jpg" as const }, items: [],
 };
 beforeEach(() => {
-  state.imageContentType = "image/jpeg";
   state.docs.clear(); state.events = []; state.deleted.clear(); state.failDeletePath = "";
   state.failSave = state.failPrivate = state.failDelete = state.failPublish = false;
+  state.invalidatePreview.mockReset().mockImplementation(async (run: () => Promise<unknown>) => run());
 });
 
 describe("画像公開・非表示・削除の失敗時", () => {
+  it("非表示と削除はプレビューの失効処理内で実行する", async () => {
+    await createSubmission(input);
+    await updateSubmissionStatus("new-id", "hide");
+    expect(state.invalidatePreview).toHaveBeenCalledOnce();
+    await deleteSubmission("new-id");
+    expect(state.invalidatePreview).toHaveBeenCalledTimes(2);
+  });
+  it.each(["hide", "delete"] as const)("プレビュー公開の結果が未確定なら%sを成功させない", async (action) => {
+    await createSubmission(input);
+    state.invalidatePreview.mockRejectedValue(new Error("pending preview"));
+    await expect(action === "hide" ? updateSubmissionStatus("new-id", "hide") : deleteSubmission("new-id")).rejects.toThrow("pending preview");
+    expect(state.docs.get("submissions/new-id")?.status).toBe("approved");
+  });
+  it("プレビュー削除の失敗は非表示成功として返さない", async () => {
+    await createSubmission(input);
+    state.invalidatePreview.mockImplementation(async (run: () => Promise<unknown>) => { await run(); throw new Error("preview delete failed"); });
+    await expect(updateSubmissionStatus("new-id", "hide")).rejects.toThrow("preview delete failed");
+    expect(state.docs.get("submissions/new-id")?.status).toBe("hidden_manual");
+  });
   it("承認時に投稿一覧の更新番号を保存する", async () => {
     await createSubmission(input);
     expect(state.docs.get("settings/submissionVersion")?.version).toBeTypeOf("string");
@@ -85,9 +112,9 @@ describe("画像公開・非表示・削除の失敗時", () => {
     expect(state.docs.get("settings/submissionVersion")?.version).toBeTypeOf("string");
     expect(state.docs.get("settings/submissionVersion")?.version).not.toBe(previous);
   });
-  it("画像を非公開で保存し、管理可能な記録ができてから公開する", async () => {
+  it("承認後も画像を公開せずに保存する", async () => {
     const result = await createSubmission(input);
-    expect(state.events).toEqual(["upload-private", "persist", "publish"]);
+    expect(state.events).toEqual(["upload-private", "persist"]);
     expect(result.status).toBe("approved");
   });
   it("DB保存に失敗した画像を公開しない", async () => {
@@ -95,9 +122,9 @@ describe("画像公開・非表示・削除の失敗時", () => {
     await expect(createSubmission(input)).rejects.toThrow("DB failed");
     expect(state.events).toEqual(["upload-private"]);
   });
-  it("公開に失敗しても手動確認できる記録を残す", async () => {
-    state.failPublish = true;
-    await expect(createSubmission(input)).rejects.toThrow("publish failed");
+  it("非公開化に失敗したら承認せず手動確認できる記録を残す", async () => {
+    state.failPrivate = true;
+    await expect(createSubmission(input)).rejects.toThrow("private failed");
     expect(state.docs.get("submissions/new-id")?.status).toBe("pending_manual");
   });
   it("非公開化の失敗は成功扱いにせず、表示を先に止める", async () => {
@@ -133,58 +160,46 @@ describe("画像公開・非表示・削除の失敗時", () => {
 
 });
 
-describe("プリセットごとの投稿回数制限", () => {
-  it.each([10, 100])("デモ用は%d件投稿済みでも受け付ける", async (count) => {
-    state.docs.set("submission_quotas/user", { count, lastAt: Date.now() - 30_000 });
-    await reserveSubmissionQuota("user", "pre-festival-home");
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(count + 1);
+describe("認証用の画像配信", () => {
+  it("手動承認でも画像を公開しない", async () => {
+    await createSubmission({ ...input, status: "pending_manual" });
+    const result = await updateSubmissionStatus("new-id", "approve");
+    expect(result?.status).toBe("approved");
+    expect(state.events).not.toContain("publish");
   });
 
-  it.each(["festival-classic-a", "unknown", undefined])("デモ用以外は10回で拒否する（%s）", async (presetId) => {
-    state.docs.set("submission_quotas/user", { count: 10, lastAt: Date.now() - 30_000 });
-    await expect(reserveSubmissionQuota("user", presetId)).rejects.toMatchObject({ reason: "limit" });
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(10);
+  it.each(["approved", "pending_manual", "hidden_manual"] as const)("%sの画像も認証APIのURLだけを返す", async (status) => {
+    const submission = await createSubmission({ ...input, status });
+    submission.items = [{ polygonId: "one", theme: "test", imageUrl: "https://storage.googleapis.com/test-bucket/submissions/old.jpg" }];
+    const [result] = await withAdminImageUrls([submission]);
+    expect(result.collageImageUrl).toBe("/api/submissions/new-id/image");
+    expect(result.items[0].imageUrl).toBe("/api/submissions/new-id/image?item=0");
   });
 
-  it("当日用は10回目まで受け付ける", async () => {
-    state.docs.set("submission_quotas/user", { count: 9, lastAt: Date.now() - 30_000 });
-    await reserveSubmissionQuota("user", "festival-classic-a");
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(10);
+  it("外部URLをそのまま画面に返さない", async () => {
+    const submission = await createSubmission(input);
+    submission.collageImageUrl = "https://example.com/private.jpg";
+    const [result] = await withAdminImageUrls([submission]);
+    expect(result.collageImageUrl).toBeUndefined();
   });
 
-  it("デモ用でも30秒以内の連続投稿は拒否する", async () => {
-    state.docs.set("submission_quotas/user", { count: 100, lastAt: Date.now() });
-    await expect(reserveSubmissionQuota("user", "pre-festival-home")).rejects.toMatchObject({ reason: "too_soon" });
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(100);
-  });
-});
-
-
-describe("印刷用画像の読み出し", () => {
-  const url = "https://storage.googleapis.com/test-bucket/submissions/work-1.jpg";
-  it("投稿記録にある自分のバケットの完成画像を返す", async () => {
-    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
-    const image = await getSubmissionImage("work-1");
-    expect(image?.buffer.toString()).toBe("submissions/work-1.jpg");
+  it("記録に紐付いた非公開画像を読み取る", async () => {
+    await createSubmission(input);
+    const image = await getSubmissionImage("new-id");
+    expect(image?.buffer.toString()).toBe("submissions/new-id_collage.jpg");
     expect(image?.contentType).toBe("image/jpeg");
   });
-  it("存在しない投稿・削除済みの画像は返さない", async () => {
+
+  it("存在しない投稿や個別画像は返さない", async () => {
     expect(await getSubmissionImage("missing")).toBeNull();
-    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
-    state.deleted.add("submissions/work-1.jpg");
-    expect(await getSubmissionImage("work-1")).toBeNull();
+    await createSubmission(input);
+    expect(await getSubmissionImage("new-id", 0)).toBeNull();
   });
-  it.each([
-    "https://example.com/private.jpg",
-    "https://storage.googleapis.com/other-bucket/submissions/private.jpg",
-    "https://storage.googleapis.com/test-bucket/secrets/private.jpg",
-  ])("投稿以外の場所を参照する画像は返さない（%s）", async collageImageUrl => {
-    state.docs.set("submissions/work-1", { collageImageUrl, items: [] });
-    expect(await getSubmissionImage("work-1")).toBeNull();
-  });
-  it("画像以外の内容を配信しない", async () => {
-    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
-    state.imageContentType = "text/html";
-    expect(await getSubmissionImage("work-1")).toBeNull();
+
+  it("別バケットや投稿以外のファイルは配信しない", async () => {
+    for (const url of ["https://example.com/photo.jpg", "https://storage.googleapis.com/test-bucket/secrets/key.jpg"]) {
+      state.docs.set("submissions/old", { collageImageUrl: url, items: [] });
+      expect(await getSubmissionImage("old")).toBeNull();
+    }
   });
 });

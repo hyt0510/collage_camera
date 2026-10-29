@@ -8,7 +8,7 @@ const created: unknown[] = [];
 const redemptionSnapshot = () => ({ exists: state.redeemedAt !== null, get: () => state.redeemedAt ?? undefined });
 const submissionsSnapshot = () => ({ docs: state.presetIds.map((presetId) => ({ get: (field: string) => field === "presetId" ? presetId : state.prizeEligible })) });
 const redemptionRef = { path: "prize_redemptions/user-1", get: async () => redemptionSnapshot() };
-const submissionsQuery = { path: "submissions?userId=user-1", get: async () => submissionsSnapshot() };
+const submissionsQuery = { path: "submissions?userId=user-1", get: async () => submissionsSnapshot(), limit: () => submissionsQuery };
 // 交換記録の全件取得（管理画面用）
 const listRedemptions = vi.fn();
 

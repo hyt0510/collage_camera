@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
 import { PrintReceipt } from "@/components/features/collage/PrintReceipt";
+import { MonitorPanel } from "@/components/features/collage/MonitorPanel";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { QrScannerScreen } from "@/components/features/camera/QrScannerScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
@@ -31,7 +32,7 @@ export default function Home() {
     setImageDataUrl, submit, reset, pushLog
   } = useCollageCapture(user);
 
-  const [activeTab, setActiveTab] = useState<"create" | "history">("create");
+  const [activeTab, setActiveTab] = useState<"create" | "history" | "monitor">("create");
 
   // OS のカメラで本部の QR を読んで開かれたときは、交換の結果が出る履歴タブを見せる
   const showHistoryTab = useCallback(() => setActiveTab("history"), []);
@@ -230,7 +231,7 @@ export default function Home() {
       )}
       {/* ヘッダー（一画面に収めるため1行にまとめる） */}
       <header
-        className="shrink-0 rounded-sm bg-zinc-50 px-3 py-2 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10 flex items-center justify-between gap-2"
+        className="shrink-0 rounded-sm bg-zinc-50 px-3 py-2 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)] border border-zinc-200 relative z-10 flex flex-wrap items-center justify-between gap-2"
         style={{ transform: "rotate(-0.5deg)" }}
       >
         <div className="absolute -top-1.5 left-4 w-10 h-3 rotate-2 masking-tape opacity-90" style={{ backgroundColor: "#CA0000" }} />
@@ -268,6 +269,17 @@ export default function Home() {
             {hasUnreadHistory && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border border-rose-700"></span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab("monitor")}
+            className={`w-16 py-1 text-xs font-bold border-2 transition-all ${
+              activeTab === "monitor"
+                ? "bg-white border-zinc-800 text-zinc-900 shadow-[2px_2px_0_0_rgba(0,0,0,0.8)] -translate-y-0.5"
+                : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
+            }`}
+            style={{ borderRadius: "2px 8px 2px 2px" }}
+          >
+            モニター
           </button>
         </div>
       </header>
@@ -385,6 +397,8 @@ export default function Home() {
             </>
           )}
         </>
+      ) : activeTab === "monitor" ? (
+        <MonitorPanel />
       ) : (
         <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300 relative z-10">
           <PrizeCard

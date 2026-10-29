@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { protectParticipantRequest } from "@/lib/api-protection";
 import { getOrCreatePrintCode, PrintCodeError } from "@/lib/print-code-store";
 import { isValidId } from "@/lib/submission-validation";
+import { settleParticipantRequest } from "@/lib/participant-admission";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const denied = await protectParticipantRequest(request, uid, "print-code");
   if (denied) return denied;
   try {
-    const code = await getOrCreatePrintCode(id, uid);
+    let reads = 30;
+    const code = await getOrCreatePrintCode(id, uid, value => { reads = value; });
+    await settleParticipantRequest(request, { reads, writes: 2 });
     return NextResponse.json({ code }, { headers });
   } catch (error) {
     const status = error instanceof PrintCodeError ? error.status : 503;
