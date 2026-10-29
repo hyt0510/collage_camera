@@ -5,13 +5,14 @@ import { fetchAssignedPreset, submitCollageData, type SubmissionResult } from "@
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
 import { isValidRandomThemeMap } from "@/lib/utils/riddles";
+import { CAPTURE_STORAGE_KEYS, createFestivalResetCheck, resetCaptureForFestival } from "@/lib/utils/festival-launch";
 
-export const IMAGES_KEY = "collage_v10_img";
-export const PRESET_KEY = "collage_v10_preset";
-const SUBMISSION_REQUEST_KEY = "collage_v10_request";
+export const IMAGES_KEY = CAPTURE_STORAGE_KEYS.images;
+export const PRESET_KEY = CAPTURE_STORAGE_KEYS.preset;
+const SUBMISSION_REQUEST_KEY = CAPTURE_STORAGE_KEYS.request;
 const SUBMISSION_COUNT_KEY = "collage_v10_count";
 const HISTORY_KEY = "collage_v10_history";
-const UNLOCKED_QRS_KEY = "collage_v10_unlocked_qrs";
+const UNLOCKED_QRS_KEY = CAPTURE_STORAGE_KEYS.unlockedQrs;
 
 type PresetSnapshot = {
   id: string;
@@ -86,6 +87,7 @@ export function useCollageCapture(user: User | null) {
   const [hasUnreadHistory, setHasUnreadHistory] = useState(false);
   const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
   const isUnlockedQRsInitialized = useRef(false);
+  const festivalResetCheck = useRef<ReturnType<typeof createFestivalResetCheck> | null>(null);
   // 連打で二重投稿しないよう、state の反映を待たずに止める
   const submittingRef = useRef(false);
   const captureRevision = useRef(0);
@@ -204,12 +206,16 @@ export function useCollageCapture(user: User | null) {
 
   useEffect(() => {
     const handleFocus = () => {
+      if (!submittingRef.current && festivalResetCheck.current?.()) {
+        window.location.reload();
+        return;
+      }
       void syncPreset();
     };
     // 登録した関数を外せるよう名前を付ける（無名関数だと撮影のたびにリスナーが増え続ける）
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        void syncPreset();
+        handleFocus();
       }
     };
     window.addEventListener("focus", handleFocus);
@@ -226,6 +232,8 @@ export function useCollageCapture(user: User | null) {
     queueMicrotask(() => {
     if (cancelled) return;
     try {
+      resetCaptureForFestival(localStorage);
+      festivalResetCheck.current = createFestivalResetCheck(localStorage);
       pushLog("--- Collage App Mounted ---");
 
       const savedCount = parseInt(localStorage.getItem(SUBMISSION_COUNT_KEY) ?? "", 10);
