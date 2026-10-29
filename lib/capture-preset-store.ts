@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/firebase-admin";
+import { FESTIVAL_LAUNCH_AT, getLaunchPresetId } from "@/lib/utils/festival-launch";
 import {
   CAPTURE_PRESETS,
   buildThemeMapFromPreset,
@@ -23,18 +24,22 @@ let cachedAt = 0;
 
 async function loadActivePresetId(): Promise<string> {
   const now = Date.now();
-  if (cachedPresetId && now - cachedAt < CACHE_TTL_MS) return cachedPresetId;
+  const crossedLaunch = cachedAt < FESTIVAL_LAUNCH_AT && now >= FESTIVAL_LAUNCH_AT;
+  if (cachedPresetId && now - cachedAt < CACHE_TTL_MS && !crossedLaunch) return cachedPresetId;
 
   try {
     const snapshot = await db.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
     const presetId = snapshot.get("presetId");
-    cachedPresetId = typeof presetId === "string" && getPresetById(presetId) ? presetId : DEFAULT_PRESET_ID;
+    const validId = typeof presetId === "string" && getPresetById(presetId) ? presetId : DEFAULT_PRESET_ID;
+    cachedPresetId = getLaunchPresetId(validId, snapshot.get("updatedAt"));
   } catch (e) {
     // Firestore に届かなくても参加者の画面は止めず、直前の値か既定のプリセットで続ける
     console.error("Failed to load active preset:", e);
-    cachedPresetId = cachedPresetId ?? DEFAULT_PRESET_ID;
+    cachedPresetId = !cachedPresetId || (cachedAt < FESTIVAL_LAUNCH_AT && Date.now() >= FESTIVAL_LAUNCH_AT)
+      ? getLaunchPresetId(DEFAULT_PRESET_ID, undefined)
+      : cachedPresetId;
   }
-  cachedAt = now;
+  cachedAt = Date.now();
   return cachedPresetId;
 }
 
@@ -81,10 +86,10 @@ export async function getActiveCapturePreset() {
 export async function getSubmissionCapturePreset() {
   const snapshot = await db.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
   // 設定を一度も保存していない環境では、参加者画面と同じ既定のお題で受け付ける
-  if (snapshot.exists === false) return buildActivePreset(DEFAULT_PRESET_ID);
+  if (snapshot.exists === false) return buildActivePreset(getLaunchPresetId(DEFAULT_PRESET_ID, undefined));
   const presetId = snapshot.get("presetId");
   if (typeof presetId !== "string" || !getPresetById(presetId)) return null;
-  return buildActivePreset(presetId);
+  return buildActivePreset(getLaunchPresetId(presetId, snapshot.get("updatedAt")));
 }
 
 /**
