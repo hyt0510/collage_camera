@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const state = vi.hoisted(() => ({ docs: new Map<string, Record<string, unknown>>(), events: [] as string[], failSave: false, failPrivate: false, failDelete: false, failPublish: false, deleted: new Set<string>(), failDeletePath: "" }));
+const state = vi.hoisted(() => ({ docs: new Map<string, Record<string, unknown>>(), events: [] as string[], failSave: false, failPrivate: false, failDelete: false, failPublish: false, deleted: new Set<string>(), failDeletePath: "", imageContentType: "image/jpeg" }));
 vi.mock("@/lib/operation-lock", () => ({ withOperationLock: async (_key: string, run: () => Promise<unknown>) => run() }));
 vi.mock("@/lib/firebase-admin", () => {
   const ref = (key: string, id: string) => ({
@@ -38,16 +38,19 @@ vi.mock("@/lib/firebase-admin", () => {
       setMetadata: async () => { if (state.deleted.has(path)) throw Object.assign(new Error("missing"), { code: 404 }); },
       makePublic: async () => { if (state.failPublish) throw new Error("publish failed"); state.events.push("publish"); },
       makePrivate: async () => { if (state.failPrivate) throw new Error("private failed"); },
+      download: async () => { if (state.deleted.has(path)) throw Object.assign(new Error("missing"), { code: 404 }); return [Buffer.from(path)]; },
+      getMetadata: async () => [{ contentType: state.imageContentType }],
       delete: async () => { if (state.failDelete || path === state.failDeletePath) throw new Error("delete failed"); state.deleted.add(path); },
     }) },
   };
 });
-const { createSubmission, updateSubmissionStatus, deleteSubmission, reserveSubmissionQuota } = await import("./submission-store");
+const { createSubmission, updateSubmissionStatus, deleteSubmission, reserveSubmissionQuota, getSubmissionImage } = await import("./submission-store");
 const input = { userId: "user", templateId: "shards-a", presetId: "festival-classic-a", prizeEligible: true,
   status: "approved" as const, moderation: { safe: true, source: "cloud-vision" as const, reason: "ok" },
   collage: { buffer: Buffer.from("test"), contentType: "image/jpeg" as const, extension: "jpg" as const }, items: [],
 };
 beforeEach(() => {
+  state.imageContentType = "image/jpeg";
   state.docs.clear(); state.events = []; state.deleted.clear(); state.failDeletePath = "";
   state.failSave = state.failPrivate = state.failDelete = state.failPublish = false;
 });
@@ -153,5 +156,35 @@ describe("プリセットごとの投稿回数制限", () => {
     state.docs.set("submission_quotas/user", { count: 100, lastAt: Date.now() });
     await expect(reserveSubmissionQuota("user", "pre-festival-home")).rejects.toMatchObject({ reason: "too_soon" });
     expect(state.docs.get("submission_quotas/user")?.count).toBe(100);
+  });
+});
+
+
+describe("印刷用画像の読み出し", () => {
+  const url = "https://storage.googleapis.com/test-bucket/submissions/work-1.jpg";
+  it("投稿記録にある自分のバケットの完成画像を返す", async () => {
+    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
+    const image = await getSubmissionImage("work-1");
+    expect(image?.buffer.toString()).toBe("submissions/work-1.jpg");
+    expect(image?.contentType).toBe("image/jpeg");
+  });
+  it("存在しない投稿・削除済みの画像は返さない", async () => {
+    expect(await getSubmissionImage("missing")).toBeNull();
+    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
+    state.deleted.add("submissions/work-1.jpg");
+    expect(await getSubmissionImage("work-1")).toBeNull();
+  });
+  it.each([
+    "https://example.com/private.jpg",
+    "https://storage.googleapis.com/other-bucket/submissions/private.jpg",
+    "https://storage.googleapis.com/test-bucket/secrets/private.jpg",
+  ])("投稿以外の場所を参照する画像は返さない（%s）", async collageImageUrl => {
+    state.docs.set("submissions/work-1", { collageImageUrl, items: [] });
+    expect(await getSubmissionImage("work-1")).toBeNull();
+  });
+  it("画像以外の内容を配信しない", async () => {
+    state.docs.set("submissions/work-1", { collageImageUrl: url, items: [] });
+    state.imageContentType = "text/html";
+    expect(await getSubmissionImage("work-1")).toBeNull();
   });
 });

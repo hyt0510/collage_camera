@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase-admin";
 
 /** 会場でIPを共有する参加者を巻き込まないよう、UIDとAPI全体で制限する。 */
-export async function protectParticipantRequest(request: Request, uid: string, scope: "submissions" | "prize"): Promise<NextResponse | null> {
+export async function protectParticipantRequest(request: Request, uid: string, scope: "submissions" | "prize" | "print-code"): Promise<NextResponse | null> {
   if (process.env.APP_CHECK_ENFORCED === "true") {
     const token = request.headers.get("X-Firebase-AppCheck");
     if (!token) return NextResponse.json({ error: "アプリの確認が必要です。ページを再読み込みしてください。" }, { status: 401 });

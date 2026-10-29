@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollageCapture } from "@/hooks/useCollageCapture";
 import { CollageFrame } from "@/components/features/collage/CollageFrame";
+import { PrintReceipt } from "@/components/features/collage/PrintReceipt";
 import { CameraScreen } from "@/components/features/camera/CameraScreen";
 import { QrScannerScreen } from "@/components/features/camera/QrScannerScreen";
 import { CollageBackground } from "@/components/features/collage/CollageBackground";
@@ -274,8 +275,8 @@ export default function Home() {
       {activeTab === "create" ? (
         <>
           {result ? (
-            // 完了画面も一画面に収める（画像は残った高さに合わせて縮める）
-            <section className="flex flex-1 min-h-0 flex-col gap-3 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 relative z-10">
+            // 完了画面は受付番号・写真・操作ボタンをカード内に収める。
+            <section className="flex shrink-0 flex-col gap-3 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900 border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300 relative z-10">
               <div className="shrink-0">
                 <h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
@@ -288,12 +289,14 @@ export default function Home() {
                 )}
               </div>
 
+              <div className="shrink-0"><PrintReceipt key={result.id} submissionId={result.id} user={user} /></div>
+
               {collageDataUrl && (
-                <div className="flex flex-1 min-h-[320px] justify-center">
+                <div className="flex shrink-0 justify-center">
                   <img
                     src={collageDataUrl}
                     alt="Your Collage"
-                    className="h-full w-auto max-w-full object-contain rounded-lg shadow-md border-2 border-white"
+                    className="block h-auto w-full rounded-lg shadow-md border-2 border-white"
                   />
                 </div>
               )}
@@ -408,6 +411,7 @@ export default function Home() {
                     alt={`Collage ${item.id}`} 
                     className="w-full h-auto rounded-lg shadow-sm mb-3"
                   />
+                  <div className="mb-3"><PrintReceipt submissionId={item.id} user={user} /></div>
                   <div className="flex justify-between items-center">
                     <div className="text-[10px] text-zinc-400">
                       {new Date(item.createdAt).toLocaleString()}
