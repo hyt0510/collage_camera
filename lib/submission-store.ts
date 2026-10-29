@@ -287,6 +287,26 @@ export async function withAdminImageUrls(submissions: Submission[]): Promise<Sub
   }));
 }
 
+/** 認証済みの画像API用。投稿記録にある自分のバケットの画像だけを取得する。 */
+export async function getSubmissionImage(id: string, itemIndex?: number): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const doc = await db.collection("submissions").doc(id).get();
+  if (!doc.exists) return null;
+  const submission = doc.data() as Submission;
+  const url = itemIndex === undefined ? submission.collageImageUrl : submission.items[itemIndex]?.imageUrl;
+  const path = storagePathFromUrl(url);
+  if (!path?.startsWith("submissions/")) return null;
+  try {
+    const file = bucket.file(path);
+    const [[buffer], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
+    const contentType = metadata.contentType;
+    if (contentType !== "image/jpeg" && contentType !== "image/png" && contentType !== "image/webp") return null;
+    return { buffer, contentType };
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && Number(error.code) === 404) return null;
+    throw error;
+  }
+}
+
 export async function updateSubmissionStatus(
   id: string,
   action: "approve" | "hide",

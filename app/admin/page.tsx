@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { saveHistoryToDB } from "@/lib/utils/idb";
+import { PrintPanel } from "@/components/features/collage/PrintPanel";
 
 type Submission = {
   id: string;
@@ -241,6 +242,8 @@ export default function AdminPage() {
       {error ? (
         <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>
       ) : null}
+
+      <PrintPanel />
 
       <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold text-zinc-900">参加者画面の割り当てプリセット</h2>
