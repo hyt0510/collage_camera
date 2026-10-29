@@ -5,7 +5,7 @@ import { fetchAssignedPreset, submitCollageData, type SubmissionResult } from "@
 import { generateCollageImage, compressImage } from "@/lib/utils/image";
 import { loadHistoryFromDB, saveHistoryToDB } from "@/lib/utils/idb";
 import { isValidRandomThemeMap } from "@/lib/utils/riddles";
-import { CAPTURE_STORAGE_KEYS, resetCaptureForFestival } from "@/lib/utils/festival-launch";
+import { CAPTURE_STORAGE_KEYS, createFestivalResetCheck, resetCaptureForFestival } from "@/lib/utils/festival-launch";
 
 export const IMAGES_KEY = CAPTURE_STORAGE_KEYS.images;
 export const PRESET_KEY = CAPTURE_STORAGE_KEYS.preset;
@@ -87,6 +87,7 @@ export function useCollageCapture(user: User | null) {
   const [hasUnreadHistory, setHasUnreadHistory] = useState(false);
   const [unlockedQRs, setUnlockedQRs] = useState<string[]>([]);
   const isUnlockedQRsInitialized = useRef(false);
+  const festivalResetCheck = useRef<ReturnType<typeof createFestivalResetCheck> | null>(null);
   // 連打で二重投稿しないよう、state の反映を待たずに止める
   const submittingRef = useRef(false);
   const captureRevision = useRef(0);
@@ -205,7 +206,7 @@ export function useCollageCapture(user: User | null) {
 
   useEffect(() => {
     const handleFocus = () => {
-      if (!submittingRef.current && resetCaptureForFestival(localStorage)) {
+      if (!submittingRef.current && festivalResetCheck.current?.()) {
         window.location.reload();
         return;
       }
@@ -232,6 +233,7 @@ export function useCollageCapture(user: User | null) {
     if (cancelled) return;
     try {
       resetCaptureForFestival(localStorage);
+      festivalResetCheck.current = createFestivalResetCheck(localStorage);
       pushLog("--- Collage App Mounted ---");
 
       const savedCount = parseInt(localStorage.getItem(SUBMISSION_COUNT_KEY) ?? "", 10);

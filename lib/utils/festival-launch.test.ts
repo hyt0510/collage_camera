@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from "vitest";
-import { CAPTURE_STORAGE_KEYS, FESTIVAL_LAUNCH_AT, FESTIVAL_PRESET_ID, getLaunchPresetId, resetCaptureForFestival } from "./festival-launch";
+import { CAPTURE_STORAGE_KEYS, FESTIVAL_LAUNCH_AT, FESTIVAL_PRESET_ID, createFestivalResetCheck, getLaunchPresetId, resetCaptureForFestival } from "./festival-launch";
 
 function createStorage() {
   const data = new Map<string, string>([
@@ -53,6 +53,38 @@ describe("本番切り替え時の撮影状態リセット", () => {
     const before = new Map(storage.data);
     expect(resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT + 86_400_000)).toBe(false);
     expect(storage.data).toEqual(before);
+  });
+});
+
+describe("タブごとの本番切り替え確認", () => {
+  it("別タブでリセットされたら、新しい写真を消さずに旧状態の再読み込みを要求する", () => {
+    const storage = createStorage();
+    const check = createFestivalResetCheck(storage);
+    expect(check(FESTIVAL_LAUNCH_AT - 1)).toBe(false);
+    resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT);
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "new-photo");
+    storage.setItem(CAPTURE_STORAGE_KEYS.unlockedQrs, "new-unlock");
+    expect(check(FESTIVAL_LAUNCH_AT + 1)).toBe(true);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBe("new-photo");
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.unlockedQrs)).toBe("new-unlock");
+    expect(check(FESTIVAL_LAUNCH_AT + 2)).toBe(false);
+  });
+
+  it("本番切り替え後に開いたタブは再読み込みせず、撮った写真を保持する", () => {
+    const storage = createStorage();
+    resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT);
+    const check = createFestivalResetCheck(storage);
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "new-photo");
+    expect(check(FESTIVAL_LAUNCH_AT + 1)).toBe(false);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBe("new-photo");
+  });
+
+  it("自分のタブで切り替えた場合も一度だけ再読み込みを要求する", () => {
+    const storage = createStorage();
+    const check = createFestivalResetCheck(storage);
+    expect(check(FESTIVAL_LAUNCH_AT)).toBe(true);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBeNull();
+    expect(check(FESTIVAL_LAUNCH_AT + 1)).toBe(false);
   });
 });
 

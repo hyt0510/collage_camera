@@ -20,6 +20,17 @@ export function resetCaptureForFestival(storage: CaptureStorage, now = Date.now(
   return true;
 }
 
+/** 状態を復元した後に、別タブも含めてリセットが発生したかを一度だけ確認する。 */
+export function createFestivalResetCheck(storage: CaptureStorage) {
+  let applied = storage.getItem(RESET_MARKER_KEY) === "1";
+  return (now = Date.now()): boolean => {
+    const reset = resetCaptureForFestival(storage, now);
+    const appliedElsewhere = !applied && storage.getItem(RESET_MARKER_KEY) === "1";
+    applied ||= reset || appliedElsewhere;
+    return reset || appliedElsewhere;
+  };
+}
+
 /** 以前の設定は本番用に切り替え、その後の管理者による選択を尊重する。 */
 export function getLaunchPresetId(presetId: string, updatedAt: unknown, now = Date.now()): string {
   if (now < FESTIVAL_LAUNCH_AT) return presetId;
