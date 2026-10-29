@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 import { getLPrintLayout, getPrintLayout } from "@/lib/utils/print";
 
 describe("getLPrintLayout", () => {
-  it("L判の89×127mmを300ppi相当の縦向き画像にする", () => {
+  it("L判の89×119mmを300ppi相当の縦向き画像にする", () => {
     const layout = getLPrintLayout(1080, 1920);
     expect(layout.width).toBe(1051);
-    expect(layout.height).toBe(1500);
+    expect(layout.height).toBe(1406);
   });
 
   it("縦長のコラージュ全体を縦横比を変えず、用紙の高さまで大きくする", () => {
     const { photo } = getLPrintLayout(1080, 1920);
     expect(photo.width / photo.height).toBeCloseTo(9 / 16);
-    expect(photo.height).toBe(1500);
+    expect(photo.height).toBe(1406);
     expect(photo.x + photo.width / 2).toBeCloseTo(525.5);
     expect(photo.y).toBe(0);
-    expect(photo.x).toBeCloseTo(103.625);
-    expect(photo.y + photo.height).toBe(1500);
+    expect(photo.x).toBeCloseTo(130.0625);
+    expect(photo.y + photo.height).toBe(1406);
   });
 
   it.each([
@@ -26,7 +26,7 @@ describe("getLPrintLayout", () => {
     expect(photo.width).toBeCloseTo(expectedWidth);
     expect(photo.height).toBeCloseTo(expectedHeight);
     expect(photo.x + photo.width / 2).toBeCloseTo(525.5);
-    expect(photo.y + photo.height / 2).toBeCloseTo(750);
+    expect(photo.y + photo.height / 2).toBeCloseTo(703);
   });
 
   it.each([
@@ -61,8 +61,8 @@ describe("チェキmini用の印刷レイアウト", () => {
 
   it("L判は出力寸法を保ち、装飾用の余白を追加しない", () => {
     expect(getPrintLayout(1080, 1920, "L")).toEqual({
-      width: 1051, height: 1500,
-      photo: { x: 103.625, y: 0, width: 843.75, height: 1500 },
+      width: 1051, height: 1406,
+      photo: { x: 130.0625, y: 0, width: 790.875, height: 1406 },
     });
   });
 

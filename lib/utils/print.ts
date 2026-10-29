@@ -1,7 +1,7 @@
 type PrintPhotoRect = { x: number; y: number; width: number; height: number };
 
 export const PRINT_FORMATS = {
-  L: { label: "L判", widthMm: 89, heightMm: 127 },
+  L: { label: "L判", widthMm: 89, heightMm: 119 },
   mini: { label: "チェキmini", widthMm: 46, heightMm: 62 },
 } as const;
 
