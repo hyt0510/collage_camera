@@ -54,7 +54,7 @@ export type Submission = {
 
 // 1人(匿名認証のUID)あたりの投稿上限と、連続投稿の最短間隔
 // 運用に合わせてここを変える
-export const MAX_SUBMISSIONS_PER_USER = 10;
+export const MAX_SUBMISSIONS_PER_USER = 20;
 export const MIN_SUBMISSION_INTERVAL_MS = 30_000;
 
 const QUOTA_COLLECTION = "submission_quotas";

@@ -18,9 +18,9 @@ export type RedeemResult =
   | { result: "redeemed" | "already"; redeemedAt: string }
   | { result: "not_eligible" };
 
-// 投稿上限と同じ10件に絞り、過去の無制限デモ投稿でも読み取りを増やさない。
+// 投稿上限と同じ20件に絞り、過去の無制限デモ投稿でも読み取りを増やさない。
 function submissionsOf(userId: string) {
-  return db.collection("submissions").where("userId", "==", userId).limit(10);
+  return db.collection("submissions").where("userId", "==", userId).limit(20);
 }
 
 function hasEligibleSubmission(submissions: { docs: { get(field: string): unknown }[] }): boolean {

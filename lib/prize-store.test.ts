@@ -6,9 +6,10 @@ vi.mock("server-only", () => ({}));
 const state: { redeemedAt: string | null; presetIds: (string | undefined)[]; prizeEligible?: boolean } = { redeemedAt: null, presetIds: [] };
 const created: unknown[] = [];
 const redemptionSnapshot = () => ({ exists: state.redeemedAt !== null, get: () => state.redeemedAt ?? undefined });
-const submissionsSnapshot = () => ({ docs: state.presetIds.map((presetId) => ({ get: (field: string) => field === "presetId" ? presetId : state.prizeEligible })) });
+let submissionLimit = Infinity;
+const submissionsSnapshot = () => ({ docs: state.presetIds.slice(0, submissionLimit).map((presetId) => ({ get: (field: string) => field === "presetId" ? presetId : state.prizeEligible })) });
 const redemptionRef = { path: "prize_redemptions/user-1", get: async () => redemptionSnapshot() };
-const submissionsQuery = { path: "submissions?userId=user-1", get: async () => submissionsSnapshot(), limit: () => submissionsQuery };
+const submissionsQuery = { path: "submissions?userId=user-1", get: async () => submissionsSnapshot(), limit: (count: number) => { submissionLimit = count; return submissionsQuery; } };
 // 交換記録の全件取得（管理画面用）
 const listRedemptions = vi.fn();
 
@@ -66,6 +67,11 @@ describe("redeemPrize", () => {
     expect(await redeemPrize("user-1", NOW)).toEqual({ result: "redeemed", redeemedAt: NOW.toISOString() });
   });
 
+  it("20件目だけが景品対象でも交換する", async () => {
+    state.presetIds = [...Array<string>(19).fill(PRE_FESTIVAL_PRESET), FESTIVAL_PRESET];
+    expect(await redeemPrize("user-1", NOW)).toEqual({ result: "redeemed", redeemedAt: NOW.toISOString() });
+  });
+
   it("サーバーが対象外と記録した投稿は、当日用IDでも交換しない", async () => {
     state.presetIds = [FESTIVAL_PRESET];
     state.prizeEligible = false;
@@ -92,6 +98,11 @@ describe("getPrizeStatus", () => {
 
   it("当日用の投稿があれば対象を返す", async () => {
     state.presetIds = [FESTIVAL_PRESET];
+    expect(await getPrizeStatus("user-1")).toEqual({ eligible: true, redeemedAt: null });
+  });
+
+  it("20件目だけが景品対象でも対象を返す", async () => {
+    state.presetIds = [...Array<string>(19).fill(PRE_FESTIVAL_PRESET), FESTIVAL_PRESET];
     expect(await getPrizeStatus("user-1")).toEqual({ eligible: true, redeemedAt: null });
   });
 });
