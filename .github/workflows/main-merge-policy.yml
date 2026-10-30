@@ -1,0 +1,27 @@
+name: Main merge policy
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  require-dev-source:
+    name: Require dev source
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require dev from this repository
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD_REF" != "dev" || "$HEAD_REPO" != "$BASE_REPO" ]]; then
+            echo "::error::main accepts pull requests only from dev in this repository."
+            exit 1
+          fi
+          echo "Allowed: dev -> main"
