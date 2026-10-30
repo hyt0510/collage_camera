@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { generatePrintImage, PRINT_FORMATS, type PrintFormat } from "@/lib/utils/print";
 import { normalizePrintCode } from "@/lib/utils/print-code";
 
@@ -125,6 +125,23 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
     }
   }
 
+  async function savePrintImage(event: MouseEvent<HTMLAnchorElement>) {
+    if (!preview || !navigator.share || !navigator.canShare) return;
+    // 通信や非同期変換を挟まず、タップ操作の中で共有メニューを開く。
+    const base64 = preview.dataUrl.slice(preview.dataUrl.indexOf(",") + 1);
+    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+    const file = new File([bytes], `collage_${preview.id}_${format === "mini" ? "instax-mini" : "L"}.jpg`, { type: "image/jpeg" });
+    if (!navigator.canShare({ files: [file] })) return;
+    event.preventDefault();
+    setError("");
+    try {
+      await navigator.share({ files: [file] });
+    } catch (cause) {
+      if (cause instanceof Error && cause.name === "AbortError") return;
+      setError("画像を共有できませんでした。作品画像を長押しして「写真に保存」を選んでください。");
+    }
+  }
+
   async function printImage() {
     const image = printImageRef.current;
     if (!image) return;
@@ -211,8 +228,9 @@ export function PrintPanel({ initialSubmissionId = "", access = "admin" }: { ini
                 ) : (
                   <Link href={`/admin/print/${encodeURIComponent(preview.id)}`} prefetch={false} className="rounded-lg bg-[#1a33d6] px-4 py-3 font-semibold text-white">印刷専用ページを開く</Link>
                 )}
-                <a href={preview.dataUrl} download={`collage_${preview.id}_${format === "mini" ? "instax-mini" : "L"}.jpg`} className="inline-flex rounded-lg border border-[#111111] bg-[#f4d21f] px-4 py-3 font-semibold text-[#111111]">{printFormat.label}用JPEGを保存</a>
+                <a href={preview.dataUrl} onClick={(event) => void savePrintImage(event)} download={`collage_${preview.id}_${format === "mini" ? "instax-mini" : "L"}.jpg`} className="inline-flex rounded-lg border border-[#111111] bg-[#f4d21f] px-4 py-3 font-semibold text-[#111111]">{printFormat.label}用JPEGを保存</a>
               </div>
+              <p className="text-xs text-zinc-600">iPhoneでは共有メニューの「画像を保存」または「ファイルに保存」を選んでください。保存できない場合は、作品画像を長押しして保存してください。</p>
               <p>{format === "mini"
                 ? "JPEGを端末に保存し、チェキプリンター用アプリ（instax mini Linkなど）で開いて印刷してください。フィルムの白い外枠は含めず、印画面に合わせた画像です。"
                 : canPrint ? "印刷設定で用紙を「L判」、向きを「縦」、倍率を「100%」にし、ヘッダーとフッターをオフにしてください。" : "保存した画像を印刷ソフトで開き、用紙を「L判」、向きを「縦」に設定してください。"}</p>
