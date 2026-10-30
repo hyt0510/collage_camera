@@ -5,7 +5,7 @@ import type { User } from "firebase/auth";
 import { fetchPrintCode } from "@/services/api/print";
 import { formatPrintCode } from "@/lib/utils/print-code";
 
-export function PrintReceipt({ submissionId, user }: { submissionId: string; user: Pick<User, "getIdToken"> | null }) {
+export function PrintReceipt({ submissionId, user, identifierOnly = false }: { submissionId: string; user: Pick<User, "getIdToken"> | null; identifierOnly?: boolean }) {
   const [receipt, setReceipt] = useState<{ code: string; qr: string | null } | null>(null);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
@@ -20,16 +20,17 @@ export function PrintReceipt({ submissionId, user }: { submissionId: string; use
         code = await fetchPrintCode(submissionId, await user!.getIdToken());
         if (cancelled) return;
         setReceipt({ code, qr: null });
+        if (identifierOnly) return;
         const { toDataURL } = await import("qrcode");
         const qr = await toDataURL(`${window.location.origin}/print/${code}`, { width: 192, margin: 4, errorCorrectionLevel: "M" });
         if (!cancelled) setReceipt({ code, qr });
       } catch (cause) {
-        if (!cancelled) setError(code ? "QRを表示できませんでした。受付番号をスタッフに見せてください。" : cause instanceof Error ? cause.message : "受付番号を取得できませんでした。");
+        if (!cancelled && !identifierOnly) setError(code ? "QRを表示できませんでした。受付番号をスタッフに見せてください。" : cause instanceof Error ? cause.message : "受付番号を取得できませんでした。");
       }
     }
     void prepare();
     return () => { cancelled = true; };
-  }, [submissionId, user, attempt]);
+  }, [submissionId, user, attempt, identifierOnly]);
 
   async function copyCode() {
     if (!receipt) return;
@@ -37,6 +38,14 @@ export function PrintReceipt({ submissionId, user }: { submissionId: string; use
       await navigator.clipboard.writeText(formatPrintCode(receipt.code));
       setCopyMessage("受付番号をコピーしました。");
     } catch { setCopyMessage("番号を長押ししてコピーするか、この画面をスタッフに見せてください。"); }
+  }
+
+  if (identifierOnly) {
+    return (
+      <span aria-label="作品の識別ID" className="inline-block max-w-full break-all rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] leading-tight text-white">
+        ID: {receipt ? formatPrintCode(receipt.code) : submissionId}
+      </span>
+    );
   }
 
   return (

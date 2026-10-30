@@ -420,12 +420,16 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-4">
               {collageHistory.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-white p-4 shadow-sm border border-zinc-100">
-                  <img 
-                    src={item.dataUrl} 
-                    alt={`Collage ${item.id}`} 
-                    className="w-full h-auto rounded-lg shadow-sm mb-3"
-                  />
-                  <div className="mb-3"><PrintReceipt submissionId={item.id} user={user} /></div>
+                  <div className="relative mb-3">
+                    <img
+                      src={item.dataUrl}
+                      alt={`Collage ${item.id}`}
+                      className="w-full h-auto rounded-lg shadow-sm"
+                    />
+                    <div className="absolute bottom-2 right-2 max-w-[90%]">
+                      <PrintReceipt submissionId={item.id} user={user} identifierOnly />
+                    </div>
+                  </div>
                   <div className="flex justify-between items-center">
                     <div className="text-[10px] text-zinc-400">
                       {new Date(item.createdAt).toLocaleString()}
