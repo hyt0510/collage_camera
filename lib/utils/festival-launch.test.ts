@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CAPTURE_STORAGE_KEYS, FESTIVAL_LAUNCH_AT, FESTIVAL_PRESET_ID, createFestivalResetCheck, getLaunchPresetId, resetCaptureForFestival } from "./festival-launch";
 
 function createStorage() {
@@ -51,7 +51,7 @@ describe("本番切り替え時の撮影状態リセット", () => {
     storage.setItem(CAPTURE_STORAGE_KEYS.preset, "new-preset");
     storage.setItem(CAPTURE_STORAGE_KEYS.request, "new-request");
     const before = new Map(storage.data);
-    expect(resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT + 86_400_000)).toBe(false);
+    expect(resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT + 1)).toBe(false);
     expect(storage.data).toEqual(before);
   });
 });
@@ -101,5 +101,54 @@ describe("本番のプリセット選択", () => {
 
   it("切り替え後に管理者が保存した設定は上書きしない", () => {
     expect(getLaunchPresetId("festival-quad-4-v2", "2026-10-30T00:00:00+09:00", FESTIVAL_LAUNCH_AT + 1)).toBe("festival-quad-4-v2");
+  });
+});
+
+describe("10月31日の撮影状態リセット", () => {
+  const nextDay = Date.parse("2026-10-31T00:00:00+09:00");
+
+  it("30日に初期化済みでも31日午前0時にもう一度だけ初期化し、履歴・ログイン・回数を残す", () => {
+    const storage = createStorage();
+    resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT);
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "oct30-photo");
+    expect(resetCaptureForFestival(storage, nextDay - 1)).toBe(false);
+    expect(resetCaptureForFestival(storage, nextDay)).toBe(true);
+    for (const key of Object.values(CAPTURE_STORAGE_KEYS)) expect(storage.getItem(key)).toBeNull();
+    expect(storage.getItem("collage_v10_history")).toBe("saved-history");
+    expect(storage.getItem("collage_v10_count")).toBe("2");
+    expect(storage.getItem("firebase:authUser:test")).toBe("signed-in-user");
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "oct31-photo");
+    expect(resetCaptureForFestival(storage, nextDay + 86_400_000)).toBe(false);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBe("oct31-photo");
+  });
+
+  it("31日に初めて開いた端末はまとめて初期化し、再度消さない", () => {
+    const storage = createStorage();
+    expect(resetCaptureForFestival(storage, nextDay)).toBe(true);
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "oct31-photo");
+    expect(resetCaptureForFestival(storage, nextDay + 1)).toBe(false);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBe("oct31-photo");
+  });
+
+  it("30日に開いたタブも31日の切り替えを一度だけ検出する", () => {
+    const storage = createStorage();
+    resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT);
+    const check = createFestivalResetCheck(storage);
+    expect(check(nextDay - 1)).toBe(false);
+    expect(check(nextDay)).toBe(true);
+    expect(check(nextDay + 1)).toBe(false);
+  });
+
+  it("別タブの31日リセットを検出しても、その後の写真を消さない", () => {
+    const storage = createStorage();
+    resetCaptureForFestival(storage, FESTIVAL_LAUNCH_AT);
+    const check = createFestivalResetCheck(storage);
+    resetCaptureForFestival(storage, nextDay);
+    storage.setItem(CAPTURE_STORAGE_KEYS.images, "oct31-photo");
+    expect(check(nextDay + 1)).toBe(true);
+    expect(check(nextDay + 2)).toBe(false);
+    expect(storage.getItem(CAPTURE_STORAGE_KEYS.images)).toBe("oct31-photo");
+    const reopened = createFestivalResetCheck(storage);
+    expect(reopened(nextDay + 3)).toBe(false);
   });
 });
