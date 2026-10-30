@@ -1,7 +1,7 @@
-﻿import "server-only";
+import "server-only";
 
 import { db } from "@/lib/firebase-admin";
-import { FESTIVAL_LAUNCH_AT, getLaunchPresetId } from "@/lib/utils/festival-launch";
+import { getFestivalSwitchAt, getLaunchPresetId } from "@/lib/utils/festival-launch";
 import {
   CAPTURE_PRESETS,
   buildThemeMapFromPreset,
@@ -27,10 +27,10 @@ let generation = 0;
 
 async function loadActivePresetId(): Promise<string> {
   const now = Date.now();
-  const crossedLaunch = cachedAt < FESTIVAL_LAUNCH_AT && now >= FESTIVAL_LAUNCH_AT;
+  const crossedLaunch = cachedAt < getFestivalSwitchAt() && now >= getFestivalSwitchAt();
   if (cachedPresetId && now - cachedAt < CACHE_TTL_MS && !crossedLaunch) return cachedPresetId;
 
-  if (pendingPreset && !(pendingStartedAt < FESTIVAL_LAUNCH_AT && now >= FESTIVAL_LAUNCH_AT)) return pendingPreset;
+  if (pendingPreset && !(pendingStartedAt < getFestivalSwitchAt() && now >= getFestivalSwitchAt())) return pendingPreset;
   const revision = generation;
   const request = (async () => {
   try {
@@ -41,7 +41,7 @@ async function loadActivePresetId(): Promise<string> {
   } catch (e) {
     // Firestore に届かなくても参加者の画面は止めず、直前の値か既定のプリセットで続ける
     console.error("Failed to load active preset:", e);
-    cachedPresetId = !cachedPresetId || (cachedAt < FESTIVAL_LAUNCH_AT && Date.now() >= FESTIVAL_LAUNCH_AT)
+    cachedPresetId = !cachedPresetId || (cachedAt < getFestivalSwitchAt() && Date.now() >= getFestivalSwitchAt())
       ? getLaunchPresetId(DEFAULT_PRESET_ID, undefined)
       : cachedPresetId;
   }

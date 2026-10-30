@@ -152,3 +152,18 @@ describe("10月31日の撮影状態リセット", () => {
     expect(reopened(nextDay + 3)).toBe(false);
   });
 });
+describe("10月31日のプリセット切り替え", () => {
+  const restart = Date.parse("2026-10-31T00:00:00+09:00");
+
+  it("直前までは30日に運営が選んだプリセットを維持する", () => {
+    expect(getLaunchPresetId("festival-quad-4-v2", "2026-10-30T12:00:00+09:00", restart - 1)).toBe("festival-quad-4-v2");
+  });
+
+  it.each([undefined, "invalid", "2026-10-29T12:00:00+09:00", "2026-10-30T23:59:59+09:00"])("31日午前0時には旧設定（%s）を6分割V3へ切り替える", updatedAt => {
+    expect(getLaunchPresetId("festival-quad-4-v2", updatedAt, restart)).toBe(FESTIVAL_PRESET_ID);
+  });
+
+  it.each(["2026-10-31T00:00:00+09:00", "2026-10-31T10:00:00+09:00"])("31日の切り替え後の運営設定（%s）は翌日も保持する", updatedAt => {
+    expect(getLaunchPresetId("festival-quad-4-v2", updatedAt, restart + 86_400_000)).toBe("festival-quad-4-v2");
+  });
+});
