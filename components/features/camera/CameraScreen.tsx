@@ -184,7 +184,7 @@ export function CameraScreen({
     drawCameraFrame(ctx, video, rotation, zoom, facingMode === "user");
 
     // 圧縮
-    const MAX = 800;
+    const MAX = 1920;
     const scale = Math.min(1, MAX / Math.max(width, height));
     const outCanvas = document.createElement("canvas");
     outCanvas.width = Math.max(1, Math.round(width * scale));
@@ -193,7 +193,7 @@ export function CameraScreen({
     if (!outCtx) return;
     outCtx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height);
 
-    const dataUrl = outCanvas.toDataURL("image/jpeg", 0.7);
+    const dataUrl = outCanvas.toDataURL("image/jpeg", 0.95);
 
     // フラッシュエフェクト
     setShowFlash(true);
