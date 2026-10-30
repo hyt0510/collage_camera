@@ -12,9 +12,6 @@ vi.mock("@/lib/firebase-admin", () => ({ db: {
     return task;
   },
 } }));
-vi.mock("@/lib/submission-store", () => ({ MAX_SUBMISSIONS_PER_USER: 10, MIN_SUBMISSION_INTERVAL_MS: 30_000,
-  SubmissionLimitError: class extends Error { constructor(public reason: string) { super(reason); } },
-}));
 const { processSubmissionRequest } = await import("./submission-request-store");
 import type { Submission } from "@/lib/submission-store";
 
@@ -22,23 +19,30 @@ const submission = (id: string) => ({ id, userId: "user", placement: { label: "A
 beforeEach(() => { state.docs.clear(); state.serial = Promise.resolve(); });
 
 describe("投稿再送の重複防止", () => {
-  it.each([10, 100])("プリセットを問わず投稿済みが%d件なら拒否する", async (count) => {
+  it.each([20, 100])("プリセットを問わず投稿済みが%d件なら拒否する", async (count) => {
     state.docs.set("submission_quotas/user", { count, lastAt: Date.now() - 30_000 });
-    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toThrow("limit");
+    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toMatchObject({ reason: "limit" });
     expect(state.docs.get("submission_quotas/user")?.count).toBe(count);
   });
 
-  it("10回の上限を維持し、上限超過時は保存処理を呼ばない", async () => {
-    state.docs.set("submission_quotas/user", { count: 10, lastAt: Date.now() - 30_000 });
+  it.each([10, 19])("投稿済みが%d件なら次の投稿を受け付ける", async (count) => {
+    state.docs.set("submission_quotas/user", { count, lastAt: Date.now() - 30_000 });
+    const result = await processSubmissionRequest("user", "request", "hash", async (id) => submission(id));
+    expect(result.userId).toBe("user");
+    expect(state.docs.get("submission_quotas/user")?.count).toBe(count + 1);
+  });
+
+  it("20回の上限を維持し、上限超過時は保存処理を呼ばない", async () => {
+    state.docs.set("submission_quotas/user", { count: 20, lastAt: Date.now() - 30_000 });
     const save = vi.fn(async (id: string) => submission(id));
-    await expect(processSubmissionRequest("user", "request", "hash", save)).rejects.toThrow("limit");
+    await expect(processSubmissionRequest("user", "request", "hash", save)).rejects.toMatchObject({ reason: "limit" });
     expect(save).not.toHaveBeenCalled();
-    expect(state.docs.get("submission_quotas/user")?.count).toBe(10);
+    expect(state.docs.get("submission_quotas/user")?.count).toBe(20);
   });
 
   it("デモ用でも30秒以内の連続投稿は拒否する", async () => {
     state.docs.set("submission_quotas/user", { count: 1, lastAt: Date.now() });
-    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toThrow("too_soon");
+    await expect(processSubmissionRequest("user", "request", "hash", async (id) => submission(id))).rejects.toMatchObject({ reason: "too_soon" });
     expect(state.docs.get("submission_quotas/user")?.count).toBe(1);
   });
 
