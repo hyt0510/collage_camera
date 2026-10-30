@@ -35,7 +35,7 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         clearTimeout(timeout);
         onLog(`Image decoded: ${img.width}x${img.height}`);
         
-        const MAX = 800; // 1000から800に縮小
+        const MAX = 1920;
         const scale = Math.min(1, MAX / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -52,7 +52,7 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
         onLog("DrawImage to canvas ok");
         
         // image/webp は一部の古いiOSで不安定または未対応のため image/jpeg を使用
-        const result = canvas.toDataURL("image/jpeg", 0.7); 
+        const result = canvas.toDataURL("image/jpeg", 0.95);
         onLog(`toDataURL ok: ${Math.round(result.length / 1024)}KB Base64 (jpeg)`);
         resolve(result);
       };
@@ -121,15 +121,15 @@ export function getCoverSourceRect(imgW: number, imgH: number, destW: number, de
 /** 中央の撮影枠で合わせた写真を、既存の合成処理で同じ構図になる位置へ戻す */
 export function createSlotPhoto(image: HTMLImageElement, clipPath: string): string {
   const canvas = document.createElement("canvas");
-  canvas.width = 450;
-  canvas.height = 800;
+  canvas.width = 1080;
+  canvas.height = 1920;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("写真を準備できませんでした。もう一度お試しください。");
   const { sx, sy, sw, sh } = getCoverSourceRect(image.naturalWidth, image.naturalHeight, canvas.width, canvas.height);
   const { offsetX, offsetY } = getCenteredPolygon(clipPath);
   ctx.drawImage(image, sx, sy, sw, sh,
     -offsetX * canvas.width / 100, -offsetY * canvas.height / 100, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.9);
+  return canvas.toDataURL("image/jpeg", 0.95);
 }
 
 export async function generateCollageImage(
@@ -206,6 +206,6 @@ export async function generateCollageImage(
   }
 
   // iPhone の Safari は canvas から WebP を出力できず数MBの PNG になり、投稿上限を超えるため JPEG にする
-  return canvas.toDataURL("image/jpeg", 0.85);
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
