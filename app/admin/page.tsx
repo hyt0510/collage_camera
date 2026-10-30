@@ -67,6 +67,7 @@ export default function AdminPage() {
   const [submissionsFailed, setSubmissionsFailed] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [prizeRedemptionCount, setPrizeRedemptionCount] = useState<number | null>(null);
+  const [copyResult, setCopyResult] = useState<{ id: string; message: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -114,6 +115,15 @@ export default function AdminPage() {
     const timerId = window.setInterval(() => void refresh(), 30000);
     return () => window.clearInterval(timerId);
   }, [refresh]);
+
+  async function copySubmissionId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopyResult({ id, message: "コピーしました" });
+    } catch {
+      setCopyResult({ id, message: "コピーできませんでした。IDを長押し、または選択してコピーしてください。" });
+    }
+  }
 
   async function mutate(id: string, action: "approve" | "hide") {
     const response = await fetch(`/api/submissions/${id}`, {
@@ -310,7 +320,18 @@ export default function AdminPage() {
                 ) : null}
               </div>
               <div className="space-y-2 p-3 text-sm">
-                <p className="font-semibold text-zinc-900">{submission.id}</p>
+                <div className="flex items-start gap-2">
+                  <p className="min-w-0 flex-1 select-all break-all font-semibold text-zinc-900">{submission.id}</p>
+                  <button
+                    type="button"
+                    onClick={() => void copySubmissionId(submission.id)}
+                    aria-label={`識別ID ${submission.id} をコピー`}
+                    className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+                  >
+                    コピー
+                  </button>
+                </div>
+                <p role="status" className="text-xs text-zinc-600">{copyResult?.id === submission.id ? copyResult.message : ""}</p>
                 <p className="text-zinc-600">状態: {statusLabels[submission.status]}</p>
                 <p className="text-zinc-600">配置: {submission.placement.label}</p>
                 <p className="text-zinc-600">
