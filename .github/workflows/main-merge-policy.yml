@@ -1,6 +1,7 @@
 name: Main merge policy
 
 on:
+  # main の信頼済み定義を使い、PR 内のコードは実行しない。
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, edited]
