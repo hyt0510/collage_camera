@@ -249,14 +249,14 @@ export function useCollageCapture(user: User | null) {
 
       loadHistoryFromDB().then(parsed => {
         if (isHistory(parsed) && parsed.length > 0) {
-          setCollageHistory(parsed.slice(0, 5));
+          setCollageHistory(parsed.slice(0, 20));
         } else {
           // 移行用: IndexedDBになければlocalStorageから読み込む
           const oldParsed = parseJson(localStorage.getItem(HISTORY_KEY));
           if (isHistory(oldParsed)) {
-            setCollageHistory(oldParsed.slice(0, 5));
+            setCollageHistory(oldParsed.slice(0, 20));
             // IndexedDBへ移行保存
-            void saveHistoryToDB(oldParsed.slice(0, 5));
+            void saveHistoryToDB(oldParsed.slice(0, 20));
           } else if (oldParsed !== null) {
             pushLog("History restoration failed");
           }
@@ -368,14 +368,14 @@ export function useCollageCapture(user: User | null) {
       setSubmissionCount(newCount);
       try { localStorage.setItem(SUBMISSION_COUNT_KEY, newCount.toString()); } catch { /* 投稿成功後の端末保存エラーは投稿失敗と扱わない */ }
       
-      // 履歴に追加 (最大5件)
+      // 履歴に追加 (最大20件)
       const historyItem: CollageHistoryItem = {
         id: res.id,
         dataUrl: generatedUrl,
         createdAt: new Date().toISOString(),
         placementLabel: res.placementLabel,
       };
-      const newHistory = [historyItem, ...collageHistory].slice(0, 5);
+      const newHistory = [historyItem, ...collageHistory].slice(0, 20);
       setCollageHistory(newHistory);
       setHasUnreadHistory(true);
       
