@@ -1,4 +1,4 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -175,4 +175,31 @@ describe("capture-preset-store", () => {
       expect((await store.getActiveCapturePreset())?.id).toBe("festival-shards-6-v3");
       expect((await store.getActiveCapturePreset())?.id).toBe("festival-shards-6-v3");
     } finally { log.mockRestore(); }
-  });});
+  });
+  it.each([false, true])("31日の切り替えはキャッシュを使わず、通信障害=%sでも6分割を表示する", async offline => {
+    vi.setSystemTime(new Date("2026-10-30T23:59:59+09:00"));
+    get.mockResolvedValue({ get: (field: string) => field === "presetId" ? OTHER_ID : "2026-10-30T12:00:00+09:00" });
+    const store = await loadStore();
+    expect((await store.getActiveCapturePreset())?.id).toBe(OTHER_ID);
+    vi.setSystemTime(new Date("2026-10-31T00:00:00+09:00"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      if (offline) get.mockRejectedValue(new Error("offline"));
+      const preset = await store.getActiveCapturePreset();
+      expect(preset?.id).toBe("festival-shards-6-v3");
+      expect(preset?.polygons).toHaveLength(6);
+      if (offline) await expect(store.getSubmissionCapturePreset()).rejects.toThrow("offline");
+      else expect((await store.getSubmissionCapturePreset())?.id).toBe(preset?.id);
+    } finally { log.mockRestore(); }
+  });
+
+  it("31日午前0時以降の運営の選択は表示と投稿の両方で保持する", async () => {
+    vi.setSystemTime(new Date("2026-10-31T00:01:00+09:00"));
+    const store = await loadStore();
+    await store.setActiveCapturePreset(OTHER_ID);
+    get.mockResolvedValue({ get: (field: string) => field === "presetId" ? OTHER_ID : "2026-10-31T00:01:00+09:00" });
+    vi.advanceTimersByTime(11_000);
+    expect((await store.getActiveCapturePreset())?.id).toBe(OTHER_ID);
+    expect((await store.getSubmissionCapturePreset())?.id).toBe(OTHER_ID);
+  });
+});
