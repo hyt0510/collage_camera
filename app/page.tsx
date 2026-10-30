@@ -301,15 +301,16 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="shrink-0"><PrintReceipt key={result.id} submissionId={result.id} user={user} /></div>
-
               {collageDataUrl && (
-                <div className="flex shrink-0 justify-center">
+                <div className="relative flex shrink-0 justify-center">
                   <img
                     src={collageDataUrl}
                     alt="Your Collage"
                     className="block h-auto w-full rounded-lg shadow-md border-2 border-white"
                   />
+                  <div className="absolute bottom-2 right-2 max-w-[90%]">
+                    <PrintReceipt key={result.id} submissionId={result.id} user={user} identifierOnly />
+                  </div>
                 </div>
               )}
 
