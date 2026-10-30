@@ -1,5 +1,7 @@
 
 import { FrameTemplate, getSlotLockId } from "@/lib/collage-config";
+import type { Ref } from "react";
+import { findRiddleByTheme, getRiddleUnlockId } from "@/lib/utils/riddles";
 import { hexToRgba, toSvgPolygonPoints, getPolygonBoundingBox, getPolygonCenter } from "@/lib/utils/styles";
 
 const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
@@ -7,13 +9,8 @@ const SLOT_COLORS = ["#CA0000", "#010193", "#E3C91D", "#1E1E1E", "#F5F3EE"];
 const getContrastColor = (hex: string) => 
   (hex === "#E3C91D" || hex === "#F5F3EE") ? "#1E1E1E" : "#F5F3EE";
 
-/** テーマ文字列を枠内ラベル用に短縮する */
-function shortenTheme(theme: string, maxLen = 5): string {
-  if (theme.length <= maxLen) return theme;
-  return theme.slice(0, maxLen) + "…";
-}
-
 interface Props {
+  frameRef?: Ref<HTMLDivElement>;
   template: FrameTemplate;
   images: Record<string, string>;
   themeMap: Record<string, string>;
@@ -24,15 +21,16 @@ interface Props {
   presetId?: string | null;
 }
 
-export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [], presetId }: Props) {
+export function CollageFrame({ frameRef, template, images, themeMap, selectedSlotId, onSlotSelect, onLog, unlockedQRs = [], presetId }: Props) {
   const slotColorMap = template.polygons.reduce<Record<string, string>>((acc, polygon, index) => {
     acc[polygon.id] = SLOT_COLORS[index % SLOT_COLORS.length] ?? SLOT_COLORS[0]!;
     return acc;
   }, {});
 
   return (
-    <div className="mx-auto w-full rounded-[24px] bg-zinc-300 p-2 shadow-inner">
-      <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
+    // 親の高さに合わせて 9:16 のまま縮む（一画面に収めるため、横幅ではなく高さを基準にする）
+    <div className="mx-auto h-full w-fit rounded-[24px] bg-zinc-300 p-2 shadow-inner">
+      <div ref={frameRef} className="relative aspect-[9/16] h-full overflow-hidden rounded-[18px] border-2 border-zinc-700 bg-zinc-200">
         {template.polygons.map((polygon, index) => {
           const image = images[polygon.id];
           const color = slotColorMap[polygon.id]!;
@@ -42,7 +40,8 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
           const theme = themeMap[polygon.id] ?? "";
 
           // ロック状態の判定
-          const lockId = presetId ? getSlotLockId(presetId, index) : null;
+          const riddle = findRiddleByTheme(theme);
+          const lockId = presetId ? (riddle ? getRiddleUnlockId(presetId, index, riddle) : getSlotLockId(presetId, index)) : null;
           const isLocked = lockId ? !unlockedQRs.includes(lockId) : false;
 
           return (
@@ -67,7 +66,7 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
             >
               {image && (
                 <div 
-                  className="absolute inset-0 animate-paste-in"
+                  className="absolute inset-0"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -80,13 +79,15 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                 </div>
               )}
 
-              {/* 未撮影時のテーマ短縮ラベル / ロック表示 */}
+              {/* 未撮影時のテーマラベル / ロック表示 */}
               {!image && (
                 <span
                   className="pointer-events-none absolute flex flex-col items-center gap-1"
                   style={{
                     left: `${center.x}%`,
                     top: `${center.y}%`,
+                    // 枠からはみ出して切れないよう、ラベルの幅を枠の横幅の7割に収める
+                    width: `${box.width * 0.7}%`,
                     transform: `translate(-50%, -50%) rotate(${Math.random() * 6 - 3}deg)`,
                   }}
                 >
@@ -99,13 +100,14 @@ export function CollageFrame({ template, images, themeMap, selectedSlotId, onSlo
                     </span>
                   ) : (
                     <span
-                      className="masking-tape text-[10px] font-bold whitespace-nowrap opacity-90"
+                      className="masking-tape max-w-full text-[10px] font-bold opacity-90"
                       style={{ 
                         backgroundColor: color, 
                         color: getContrastColor(color) 
                       }}
                     >
-                      {shortenTheme(theme)}
+                      {/* 2行を超える分は「…」で省略する */}
+                      <span className="line-clamp-2 text-center leading-snug">{riddle ? "謎解き" : theme}</span>
                     </span>
                   )}
                 </span>

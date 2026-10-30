@@ -56,7 +56,6 @@ async function seed() {
       templateId: "dummy-template",
       createdAt: new Date().toISOString(),
       status: "approved",
-      redeemed: false,
       placement,
       items: [],
       collageImageUrl: dummyUrl

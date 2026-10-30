@@ -1,47 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { requireAdminPage } from '@/lib/admin-auth';
+import { requirePrint } from '@/lib/print-auth';
 
 export function proxy(req: NextRequest) {
-  const basicAuth = req.headers.get('authorization');
-  const url = req.nextUrl;
-
-  // 保護したいパスのリスト
-  const protectedPaths = ['/admin', '/monitor'];
-
-  // 現在のパスが保護対象かチェック
-  const isProtected = protectedPaths.some(path => url.pathname.startsWith(path));
-
-  if (isProtected) {
-    const user = process.env.ADMIN_USER;
-    const pass = process.env.ADMIN_PASSWORD;
-
-    // 環境変数が設定されていない場合は、セキュリティリスクを避けるため
-    // 開発時以外は警告を出すか、デフォルトで認証を求めるべきだが、
-    // ここでは「設定されている場合のみ認証を行う」形にする
-    if (user && pass) {
-      if (basicAuth) {
-        const authValue = basicAuth.split(' ')[1];
-        if (authValue) {
-          const [u, p] = atob(authValue).split(':');
-          if (u === user && p === pass) {
-            return NextResponse.next();
-          }
-        }
-      }
-
-      return new NextResponse('Auth Required.', {
-        status: 401,
-        headers: {
-          'WWW-Authenticate': 'Basic realm="Secure Area"',
-        },
-      });
-    }
+  if (req.nextUrl.pathname === '/print' || req.nextUrl.pathname.startsWith('/print/')) {
+    const denied = requirePrint(req.headers.get('authorization'));
+    return denied ?? NextResponse.next();
   }
-
+  // 管理画面とモニターは同じBasic認証で保護する（APIは各Route Handler側でも認証する）
+  const denied = requireAdminPage(req.headers.get('authorization'));
+  if (denied) return denied;
   return NextResponse.next();
 }
 
-// 実行対象のパスを指定
+// 参加者画面と投稿APIには画面用のBasic認証をかけない
 export const config = {
-  matcher: ['/admin/:path*', '/monitor/:path*'],
+  matcher: ['/admin', '/admin/:path*', '/monitor', '/monitor/:path*', '/print', '/print/:path*'],
 };

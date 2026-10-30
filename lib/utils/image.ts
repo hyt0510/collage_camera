@@ -1,4 +1,5 @@
 import { FrameTemplate } from "@/lib/collage-config";
+import { getCenteredPolygon } from "@/lib/utils/styles";
 
 /**
  * デバッグログ付き画像処理ユーティリティ
@@ -70,6 +71,27 @@ export async function compressImage(file: File, onLog: (msg: string) => void): P
   }
 }
 
+// 端末のメモリを使い切らないよう、元ファイルの大きさに上限を設ける
+const MAX_PHOTO_FILE_BYTES = 50 * 1024 * 1024;
+
+export const PHOTO_LOAD_ERROR_MESSAGE =
+  "この写真は読み込めませんでした。別の写真を選ぶか、カメラで撮影してください。";
+
+/**
+ * アルバムやOS標準カメラで選んだ写真を、投稿用の大きさに縮めて読み込む
+ * 読み込めないときは PHOTO_LOAD_ERROR_MESSAGE の Error を投げる
+ */
+export async function loadPhotoFile(file: File): Promise<string> {
+  if ((file.type && !file.type.startsWith("image/")) || file.size > MAX_PHOTO_FILE_BYTES) {
+    throw new Error(PHOTO_LOAD_ERROR_MESSAGE);
+  }
+  try {
+    return await compressImage(file, () => {});
+  } catch {
+    throw new Error(PHOTO_LOAD_ERROR_MESSAGE);
+  }
+}
+
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -78,6 +100,36 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = (e) => reject(e);
     img.src = src;
   });
+}
+
+/**
+ * CSS の object-cover と同じく、描画先を隙間なく埋めるために元画像から切り出す範囲を求める
+ */
+export function getCoverSourceRect(imgW: number, imgH: number, destW: number, destH: number) {
+  const imgRatio = imgW / imgH;
+  const destRatio = destW / destH;
+  if (imgRatio > destRatio) {
+    // 画像の方が横長 -> 左右をカット
+    const sw = imgH * destRatio;
+    return { sx: (imgW - sw) / 2, sy: 0, sw, sh: imgH };
+  }
+  // 画像の方が縦長 -> 上下をカット
+  const sh = imgW / destRatio;
+  return { sx: 0, sy: (imgH - sh) / 2, sw: imgW, sh };
+}
+
+/** 中央の撮影枠で合わせた写真を、既存の合成処理で同じ構図になる位置へ戻す */
+export function createSlotPhoto(image: HTMLImageElement, clipPath: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 450;
+  canvas.height = 800;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("写真を準備できませんでした。もう一度お試しください。");
+  const { sx, sy, sw, sh } = getCoverSourceRect(image.naturalWidth, image.naturalHeight, canvas.width, canvas.height);
+  const { offsetX, offsetY } = getCenteredPolygon(clipPath);
+  ctx.drawImage(image, sx, sy, sw, sh,
+    -offsetX * canvas.width / 100, -offsetY * canvas.height / 100, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 export async function generateCollageImage(
@@ -139,35 +191,21 @@ export async function generateCollageImage(
     ctx.closePath();
     ctx.clip();
 
-    // 画像を中央配置（cover/center-crop）
-    const imgRatio = img.width / img.height;
-    const polyRatio = polyW / polyH;
+    // 拡大は切り抜きの形だけに使い、写真は等倍で描く（クリップ領域は変形を戻しても残る）
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    let sx, sy, sw, sh;
-    if (imgRatio > polyRatio) {
-      // 画像の方が横長 -> 左右をカット
-      sh = img.height;
-      sw = sh * polyRatio;
-      sx = (img.width - sw) / 2;
-      sy = 0;
-    } else {
-      // 画像の方が縦長 -> 上下をカット
-      sw = img.width;
-      sh = sw / polyRatio;
-      sx = 0;
-      sy = (img.height - sh) / 2;
-    }
+    // 撮影画面・プレビューと同じく、写真を画面全体に cover で敷いてから枠の形で切り抜く
+    const { sx, sy, sw, sh } = getCoverSourceRect(img.width, img.height, width, height);
 
     // 0以下のサイズでの drawImage は SyntaxError (The string did not match the expected pattern) の原因になる
-    const drawW = Math.max(1, polyW);
-    const drawH = Math.max(1, polyH);
     const sourceW = Math.max(1, sw);
     const sourceH = Math.max(1, sh);
 
-    ctx.drawImage(img, sx, sy, sourceW, sourceH, minX, minY, drawW, drawH);
+    ctx.drawImage(img, sx, sy, sourceW, sourceH, 0, 0, width, height);
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/webp", 0.8);
+  // iPhone の Safari は canvas から WebP を出力できず数MBの PNG になり、投稿上限を超えるため JPEG にする
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 

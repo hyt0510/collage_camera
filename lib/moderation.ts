@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ModerationResult } from "@/lib/submission-store";    
+import { reserveVisionRequest } from "@/lib/vision-budget";
 
 type SafeSearchLikelihood =
   | "UNKNOWN"
@@ -16,13 +17,8 @@ type SafeSearchAnnotation = {
   racy?: SafeSearchLikelihood;
 };
 
-function getBase64Payload(dataUrl: string): string {
-  const prefix = "data:image/";
-  if (!dataUrl.startsWith(prefix) || !dataUrl.includes(";base64,")) {
-    throw new Error("Invalid image data format");      
-  }
-  return dataUrl.split(";base64,")[1]!;
-}
+// 応答が返らないときに投稿全体を待たせないための上限
+const VISION_TIMEOUT_MS = 10000;
 
 function isUnsafeLikelihood(value?: SafeSearchLikelihood): boolean {
   return value === "LIKELY" || value === "VERY_LIKELY";
@@ -30,9 +26,10 @@ function isUnsafeLikelihood(value?: SafeSearchLikelihood): boolean {
 
 /**
  * 画像の安全性を判定
- * エラー時や未設定時は「手動確認待ち(safe: null)」として返し、処理を止めない
+ * エラー時や未設定時は「判定不能(safe: null)」として返し、処理を止めない
+ * 判定不能の投稿は呼び出し側で手動確認待ちにする
  */
-export async function moderateImage(dataUrl: string): Promise<ModerationResult> {
+export async function moderateImage(image: Buffer): Promise<ModerationResult> {
   const apiKey = process.env.GOOGLE_CLOUD_VISION_API_KEY;
   
   if (!apiKey || apiKey === "skip") {
@@ -44,16 +41,20 @@ export async function moderateImage(dataUrl: string): Promise<ModerationResult> 
   }
 
   try {
-    const content = getBase64Payload(dataUrl);
+    if (!await reserveVisionRequest()) {
+      return { safe: null, source: "disabled", reason: "Automatic moderation budget is unavailable; manual review required." };
+    }
     const response = await fetch(
-      `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+      "https://vision.googleapis.com/v1/images:annotate",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // キーをURLに載せるとログに残りやすいため、ヘッダーで渡す
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
         body: JSON.stringify({
           requests: [
             {
-              image: { content },
+              image: { content: image.toString("base64") },
               features: [{ type: "SAFE_SEARCH_DETECTION" }],
             },
           ],
@@ -71,11 +72,15 @@ export async function moderateImage(dataUrl: string): Promise<ModerationResult> 
     const payload = (await response.json()) as {
       responses?: Array<{ safeSearchAnnotation?: SafeSearchAnnotation }>;
     };
-    const annotation = payload.responses?.[0]?.safeSearchAnnotation; 
+    const annotation = payload.responses?.[0]?.safeSearchAnnotation;
+    if (!annotation) {
+      return { safe: null, source: "disabled", reason: "No SafeSearch result." };
+    }
+
     const unsafe =
-      isUnsafeLikelihood(annotation?.adult) ||
-      isUnsafeLikelihood(annotation?.violence) ||
-      isUnsafeLikelihood(annotation?.racy);
+      isUnsafeLikelihood(annotation.adult) ||
+      isUnsafeLikelihood(annotation.violence) ||
+      isUnsafeLikelihood(annotation.racy);
 
     return {
       safe: !unsafe,

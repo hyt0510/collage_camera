@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import { loadPhotoFile, PHOTO_LOAD_ERROR_MESSAGE } from "@/lib/utils/image";
 
 interface Props {
   errorType: "not-supported" | "permission-denied" | "error";
@@ -11,35 +12,18 @@ interface Props {
 export function CameraPermissionError({ errorType, onNativeCapture, onClose }: Props) {
   const nativeCameraRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Compress and convert to data URL
-    const url = URL.createObjectURL(file);
     try {
-      const img = new Image();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Timeout")), 10000);
-        img.onload = () => {
-          clearTimeout(timeout);
-          const MAX = 800;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { reject(new Error("Canvas failed")); return; }
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/jpeg", 0.7));
-        };
-        img.onerror = () => { clearTimeout(timeout); reject(new Error("Load failed")); };
-        img.src = url;
-      });
-      onNativeCapture(dataUrl);
+      setLoadError(null);
+      onNativeCapture(await loadPhotoFile(file));
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : PHOTO_LOAD_ERROR_MESSAGE);
     } finally {
-      URL.revokeObjectURL(url);
       e.target.value = "";
     }
   };
@@ -75,6 +59,9 @@ export function CameraPermissionError({ errorType, onNativeCapture, onClose }: P
         <div className="text-4xl mb-3 mt-2">{msg.icon}</div>
         <h2 className="text-lg font-bold text-zinc-900 mb-2 leading-tight">{msg.title}</h2>
         <p className="text-sm text-zinc-600 mb-6 leading-relaxed text-left">{msg.desc}</p>
+        {loadError && (
+          <p className="-mt-3 mb-4 text-xs font-bold text-rose-700 text-left">{loadError}</p>
+        )}
 
         <div className="flex flex-col gap-4 w-full">
           {/* OS標準カメラで撮影 */}

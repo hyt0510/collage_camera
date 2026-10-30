@@ -7,13 +7,14 @@ type Submission = {
   id: string;
   createdAt: string;
   status: "approved" | "pending_manual" | "hidden_auto" | "hidden_manual";
-  redeemed: boolean;
+  prizeRedeemedAt: string | null;
   placement: { label: string };
   collageDataUrl?: string;
+  moderation?: { source: string; reason: string; safe: boolean | null };
   items: Array<{
     theme: string;
-    dataUrl: string;
-    moderation: { source: string; reason: string; safe: boolean | null };
+    dataUrl?: string;
+    moderation?: { source: string; reason: string; safe: boolean | null };
   }>;
 };
 
@@ -40,12 +41,32 @@ const statusLabels: Record<Submission["status"], string> = {
   hidden_manual: "手動非表示",
 };
 
+// 一覧の絞り込み。「非表示」は自動・手動をまとめる
+type StatusFilter = "all" | "pending_manual" | "approved" | "hidden";
+
+const statusFilters: Array<{ key: StatusFilter; label: string }> = [
+  { key: "all", label: "すべて" },
+  { key: "pending_manual", label: "手動確認待ち" },
+  { key: "approved", label: "表示中" },
+  { key: "hidden", label: "非表示" },
+];
+
+function matchesStatusFilter(status: Submission["status"], filter: StatusFilter) {
+  if (filter === "all") return true;
+  if (filter === "hidden") return status === "hidden_auto" || status === "hidden_manual";
+  return status === filter;
+}
+
 export default function AdminPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [presets, setPresets] = useState<PresetSummary[]>([]);
   const [activePreset, setActivePreset] = useState<ActivePreset | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [error, setError] = useState("");
+  // 取得に失敗したときは件数を「0件」と誤表示しない
+  const [submissionsFailed, setSubmissionsFailed] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [prizeRedemptionCount, setPrizeRedemptionCount] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -54,30 +75,36 @@ export default function AdminPage() {
         fetch("/api/capture-preset", { cache: "no-store" }),
       ]);
       const submissionsPayload = (await submissionsResponse.json()) as
-        | { submissions: Submission[] }
+        | { submissions: Submission[]; prizeRedemptionCount: number | null }
         | { error: string };
       const presetsPayload = (await presetsResponse.json()) as
         | { presets: PresetSummary[]; activePreset: ActivePreset }
         | { error: string };
 
-      if (
-        !submissionsResponse.ok ||
-        !presetsResponse.ok ||
-        !("submissions" in submissionsPayload) ||
-        !("presets" in presetsPayload)
-      ) {
-        setError("投稿一覧の取得に失敗しました。");
-        return;
+      // 片方が失敗しても、取得できた方は画面に反映する
+      const errors: string[] = [];
+      if (submissionsResponse.ok && "submissions" in submissionsPayload) {
+        setSubmissions(submissionsPayload.submissions);
+        setPrizeRedemptionCount(submissionsPayload.prizeRedemptionCount);
+        setSubmissionsFailed(false);
+      } else {
+        errors.push("投稿一覧の取得に失敗しました。");
+        setSubmissionsFailed(true);
+        setPrizeRedemptionCount(null);
       }
-
-      setError("");
-      setSubmissions(submissionsPayload.submissions);
-      setPresets(presetsPayload.presets);
-      setActivePreset(presetsPayload.activePreset);
-      setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
+      if (presetsResponse.ok && "presets" in presetsPayload) {
+        setPresets(presetsPayload.presets);
+        setActivePreset(presetsPayload.activePreset);
+        setSelectedPresetId((current) => current || presetsPayload.activePreset.id);
+      } else {
+        errors.push("プリセットの取得に失敗しました。");
+      }
+      setError(errors.join(" "));
     } catch (err) {
       console.error("Admin refresh error:", err);
       setError("ネットワークエラーまたはサーバーエラーが発生しました。");
+      setSubmissionsFailed(true);
+      setPrizeRedemptionCount(null);
     }
   }, []);
 
@@ -88,7 +115,7 @@ export default function AdminPage() {
     return () => window.clearInterval(timerId);
   }, [refresh]);
 
-  async function mutate(id: string, action: "approve" | "hide" | "redeem") {
+  async function mutate(id: string, action: "approve" | "hide") {
     const response = await fetch(`/api/submissions/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -142,9 +169,20 @@ export default function AdminPage() {
     await refresh();
   }
 
-  const pendingCount = useMemo(
-    () => submissions.filter((submission) => submission.status === "pending_manual").length,
+  const filterCounts = useMemo(
+    () => Object.fromEntries(
+      statusFilters.map(({ key }) => [
+        key,
+        submissions.filter((submission) => matchesStatusFilter(submission.status, key)).length,
+      ]),
+    ) as Record<StatusFilter, number>,
     [submissions],
+  );
+  const pendingCount = filterCounts.pending_manual;
+
+  const filteredSubmissions = useMemo(
+    () => submissions.filter((submission) => matchesStatusFilter(submission.status, statusFilter)),
+    [submissions, statusFilter],
   );
 
   async function resetClientState() {
@@ -170,7 +208,18 @@ export default function AdminPage() {
         <div>
           <h1 className="text-xl font-bold text-zinc-900">運営管理画面</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            手動審査待ち: <span className="font-semibold">{pendingCount}</span> 件
+            手動審査待ち:{" "}
+            {submissionsFailed ? (
+              <span className="font-semibold">—</span>
+            ) : (
+              <>
+                <span className="font-semibold">{pendingCount}</span> 件
+              </>
+            )}
+          </p>
+          <p className="mt-1 text-sm text-zinc-600">
+            景品交換済み:{" "}
+            <span className="font-semibold">{prizeRedemptionCount ?? "—"}</span> 人
           </p>
         </div>
         <div className="flex gap-2">
@@ -223,11 +272,29 @@ export default function AdminPage() {
         </div>
       </section>
 
+      <nav className="mt-4 flex flex-wrap gap-2" aria-label="状態で絞り込む">
+        {statusFilters.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setStatusFilter(key)}
+            aria-pressed={statusFilter === key}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+              statusFilter === key
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-700 shadow-sm hover:bg-zinc-100"
+            }`}
+          >
+            {label} {submissionsFailed ? "—" : filterCounts[key]}
+          </button>
+        ))}
+      </nav>
+
       <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {submissions.map((submission, index) => {
+        {filteredSubmissions.map((submission, index) => {
           const previewUrl = submission.collageDataUrl || submission.items?.[0]?.dataUrl;
           const previewTheme = submission.items?.[0]?.theme;
-          const moderation = submission.items?.[0]?.moderation;
+          const moderation = submission.moderation ?? submission.items?.[0]?.moderation;
           return (
             <article
               key={submission.id || `sub-${index}`}
@@ -250,7 +317,14 @@ export default function AdminPage() {
                   検閲: {moderation?.source} / {moderation?.reason}
                 </p>
 
-                <p className="text-zinc-600">消込: {submission.redeemed ? "済み" : "未"}</p>
+                <p className="text-zinc-600">
+                  {/* 交換記録を読めなかったときは「未」と誤って見せない */}
+                  景品: {prizeRedemptionCount === null
+                    ? "—"
+                    : submission.prizeRedeemedAt
+                      ? `交換済み ${new Date(submission.prizeRedeemedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
+                      : "未"}
+                </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     type="button"
@@ -265,13 +339,6 @@ export default function AdminPage() {
                     className="rounded-md bg-zinc-700 px-2 py-1 text-xs font-semibold text-white"
                   >
                     非表示
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => mutate(submission.id, "redeem")}
-                    className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-semibold text-white"
-                  >
-                    バザー券消込
                   </button>
                   <button
                     type="button"
