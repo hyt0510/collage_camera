@@ -8,6 +8,15 @@ const preset = CAPTURE_PRESETS.find(p => p.id === "festival-shards-6-v3")!;
 const template = findTemplateById(preset.templateId)!;
 
 describe("謎解きとお題の抽選", () => {
+  it("Excelのお題を先頭から末尾まで抽選でき、投稿時にも受け付ける", () => {
+    const first = randomizeThemeMap(template, preset, () => 0);
+    const last = randomizeThemeMap(template, preset, () => 0.999);
+    expect(first[template.polygons[0]!.id]).toBe("バザーで一番おいしそうな食べ物を撮ろう");
+    expect(last[template.polygons[0]!.id]).toBe("部活紹介の掲示板を撮ろう");
+    expect(isValidRandomThemeMap(template, preset, first)).toBe(true);
+    expect(isValidRandomThemeMap(template, preset, last)).toBe(true);
+  });
+
   it("通常4問を重複なし、五十音表・矢印を各1問抽選する", () => {
     const map = randomizeThemeMap(template, preset, () => 0);
     const normal = template.polygons.slice(0, 4).map(p => map[p.id]);
